@@ -1,0 +1,241 @@
+# 🌟 StarStitch
+
+**Seamless AI-powered video morphing pipeline that creates continuous "celebrity selfie chain" transitions.**
+
+[![Python 3.x](https://img.shields.io/badge/Python-3.x-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Status: In Development](https://img.shields.io/badge/Status-In%20Development-yellow.svg)]()
+
+---
+
+## 🎬 What is StarStitch?
+
+StarStitch is a Python automation tool that generates seamless "morphing selfie" video chains. Give it a list of people (celebrities, team members, historical figures—anyone!) and a location, and it creates a single continuous video where one person appears to morph into the next while maintaining the same selfie angle.
+
+**The Magic:** The end frame of each transition becomes the start frame of the next, creating pixel-perfect continuity that looks like one impossible, continuous shot.
+
+---
+
+## ✨ Key Features
+
+- **Frame-Perfect Transitions** — Extracts the exact last frame of each video segment to ensure zero-glitch morphing
+- **Dual-Provider Architecture** — Leverages Replicate for fast image generation and Fal.ai for high-quality video morphing
+- **Crash Recovery** — Resume capability allows picking up where you left off if generation fails mid-sequence
+- **JSON Configuration** — Swap subjects and scenes without touching code
+- **Modular Design** — Easily swap AI providers as APIs evolve
+
+---
+
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        StarStitch Pipeline                       │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│   config.json ──► ImageGenerator ──► VideoGenerator ──► FFMPEG  │
+│        │              (Replicate)       (Fal.ai/Kling)     │     │
+│        │                   │                 │             │     │
+│        ▼                   ▼                 ▼             ▼     │
+│   [Subjects]    →    [Images]    →    [Videos]    →   [Final]   │
+│   [Location]         anchor.png       morph_01.mp4    output.mp4│
+│                      target_01.png    morph_02.mp4              │
+│                      target_02.png    morph_03.mp4              │
+│                          ...              ...                    │
+│                                                                  │
+│   ┌──────────────────────────────────────────────────────────┐  │
+│   │  THE "GLITCH FIX" LOOP:                                  │  │
+│   │  1. Generate target image                                │  │
+│   │  2. Create morph video (start → end)                     │  │
+│   │  3. Extract LAST FRAME of video                          │  │
+│   │  4. Use extracted frame (not original!) as next start    │  │
+│   │  5. Repeat for each subject                              │  │
+│   └──────────────────────────────────────────────────────────┘  │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Python 3.8+
+- FFMPEG installed and available in PATH
+- API keys for [Replicate](https://replicate.com/) and [Fal.ai](https://fal.ai/)
+
+### Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/scott29kelly/StarStitch.git
+cd StarStitch
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Set up environment variables
+cp .env.example .env
+# Edit .env with your API keys
+```
+
+### Configuration
+
+Create or edit `config.json`:
+
+```json
+{
+  "project_name": "my_first_stitch",
+  "output_folder": "renders",
+  "settings": {
+    "aspect_ratio": "9:16",
+    "transition_duration_sec": 5,
+    "image_model": "black-forest-labs/flux-1.1-pro",
+    "video_model": "fal-ai/kling-video/v1.6/pro/image-to-video"
+  },
+  "global_scene": {
+    "location_prompt": "taking a selfie at the Eiffel Tower, golden hour lighting, 4k photorealistic",
+    "negative_prompt": "blurry, distorted, cartoon, low quality"
+  },
+  "sequence": [
+    {
+      "id": "anchor",
+      "name": "Tourist",
+      "visual_prompt": "A friendly tourist in casual clothes, smiling broadly"
+    },
+    {
+      "id": "celeb_01",
+      "name": "Elon Musk",
+      "visual_prompt": "Elon Musk in a black t-shirt, slight smirk"
+    },
+    {
+      "id": "celeb_02",
+      "name": "Taylor Swift",
+      "visual_prompt": "Taylor Swift with red lipstick, genuine smile"
+    }
+  ]
+}
+```
+
+### Run
+
+```bash
+python main.py
+
+# Or with a specific config file
+python main.py --config my_custom_config.json
+
+# Resume a crashed render
+python main.py --resume renders/render_20250117_143022
+```
+
+---
+
+## 📁 Project Structure
+
+```
+StarStitch/
+├── main.py                 # Entry point and ChainManager
+├── config.py               # Configuration loader
+├── requirements.txt        # Python dependencies
+├── .env.example            # Environment variable template
+├── config.json             # Default configuration
+├── providers/
+│   ├── __init__.py
+│   ├── image_generator.py  # Replicate wrapper
+│   └── video_generator.py  # Fal.ai wrapper
+├── utils/
+│   ├── __init__.py
+│   ├── ffmpeg_utils.py     # Frame extraction & concatenation
+│   └── file_manager.py     # Asset organization & resume logic
+└── renders/                # Output directory (generated)
+    └── render_{timestamp}/
+        ├── 00_anchor.png
+        ├── 01_target.png
+        ├── 01_morph.mp4
+        ├── 01_lastframe.png
+        ├── ...
+        └── final_starstitch.mp4
+```
+
+---
+
+## 🔧 Tech Stack
+
+| Component | Technology | Purpose |
+|-----------|------------|---------|
+| **Language** | Python 3.x | Core application |
+| **Image Gen** | Replicate (Flux 1.1 Pro) | High-quality celebrity likeness |
+| **Video Gen** | Fal.ai (Kling v1.6 Pro) | Start/end frame morphing |
+| **Video Processing** | FFMPEG | Frame extraction & concatenation |
+| **Config** | JSON | Flexible scene definition |
+
+---
+
+## 🎯 Use Cases
+
+- **Social Media Content** — Eye-catching morphing reels for TikTok/Instagram
+- **Team Introductions** — Fun "meet the team" videos for organizations
+- **Event Promotion** — Morph through speakers/performers at an event
+- **Historical Timelines** — Morph through historical figures at famous locations
+- **Creative Projects** — Artistic video experiments and music videos
+
+---
+
+## 🗺️ Roadmap
+
+- [ ] **v0.1** — Core pipeline with Replicate + Fal.ai integration
+- [ ] **v0.2** — Web UI for configuration (Streamlit/Gradio)
+- [ ] **v0.3** — Additional video providers (Runway, Luma)
+- [ ] **v0.4** — Audio track integration
+- [ ] **v0.5** — Batch processing for multiple configs
+- [ ] **v1.0** — Production-ready release with comprehensive error handling
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## 🙏 Acknowledgments
+
+- [Replicate](https://replicate.com/) for accessible AI model APIs
+- [Fal.ai](https://fal.ai/) for Kling video generation endpoints
+- [Black Forest Labs](https://blackforestlabs.ai/) for the Flux image model
+- The AI coding community for vibe coding inspiration
+
+---
+
+## ⚠️ Disclaimer
+
+This tool generates AI content. Please use responsibly and in accordance with:
+- The terms of service of Replicate and Fal.ai
+- Copyright and likeness rights considerations
+- Platform content policies where you share the output
+
+**Note:** Generated content featuring real people should be clearly labeled as AI-generated and used only for legitimate creative purposes.
+
+---
+
+<p align="center">
+  <strong>Built with 🤖 + ☕ by <a href="https://github.com/scott29kelly">Scott Kelly</a></strong>
+</p>
