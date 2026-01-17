@@ -1,0 +1,26 @@
+{
+  "project_name": "example_stitch",
+  "output_folder": "renders",
+  "settings": {
+    "aspect_ratio": "9:16",
+    "transition_duration": "5",
+    "image_model": "black-forest-labs/flux-1.1-pro",
+    "video_model": "fal-ai/kling-video/v1.6/pro/image-to-video"
+  },
+  "global_scene": {
+    "location_prompt": "taking a selfie in Times Square at night, neon lights, 4k photorealistic",
+    "negative_prompt": "blurry, distorted, cartoon, low quality, extra limbs"
+  },
+  "sequence": [
+    {
+      "id": "anchor",
+      "name": "Tourist",
+      "visual_prompt": "A friendly young tourist in casual clothes, genuine smile, holding phone for selfie"
+    },
+    {
+      "id": "person_01",
+      "name": "Elon Musk",
+      "visual_prompt": "Elon Musk in a black t-shirt, confident expression, holding phone for selfie"
+    }
+  ]
+}
