@@ -5,6 +5,7 @@ import {
   Settings, 
   Play, 
   Image, 
+  History,
   Github,
   ChevronRight
 } from 'lucide-react';
@@ -20,6 +21,7 @@ const navItems: { id: View; label: string; icon: React.ReactNode }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
   { id: 'configure', label: 'Configure', icon: <Settings size={20} /> },
   { id: 'render', label: 'Render', icon: <Play size={20} /> },
+  { id: 'history', label: 'History', icon: <History size={20} /> },
   { id: 'gallery', label: 'Gallery', icon: <Image size={20} /> },
 ];
 
@@ -155,7 +157,7 @@ export function Layout({ children, currentView, onViewChange }: LayoutProps) {
               <span className="text-sm">View on GitHub</span>
             </a>
             <p className="text-xs text-mist/60 mt-4 px-4">
-              v0.2.0 — 2026 Edition
+              v0.6.0 — API Backend
             </p>
           </motion.div>
         </div>

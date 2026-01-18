@@ -59,36 +59,37 @@
   - FFMPEG-based intelligent cropping (center-focused)
   - Variants tab in Web UI
 
+### v0.6 - API Backend ✅
+**Goal:** RESTful API for programmatic access and React frontend integration
+
+- [x] **FastAPI Server**
+  - `POST /api/render` - Start new render
+  - `GET /api/render/{id}` - Get render status
+  - `DELETE /api/render/{id}` - Cancel render
+  - `GET /api/renders` - List all renders with pagination
+  - `GET /api/templates` - List available templates
+
+- [x] **WebSocket Progress**
+  - Real-time render updates at `/ws/render/{job_id}`
+  - Step-by-step progress streaming
+  - Error notifications pushed to connected clients
+
+- [x] **Job Queue**
+  - In-memory asyncio-based job queue
+  - Background task processing
+  - Track job state: pending, running, complete, failed, cancelled
+  - Configurable concurrency (default: 1 job at a time)
+
+- [x] **React Frontend Integration**
+  - API client for REST calls
+  - WebSocket hook for real-time progress
+  - Render history view with status indicators
+
 ---
 
 ## In Progress
 
-### v0.6 - API Backend
-**Goal:** RESTful API for programmatic access and React frontend integration
 
-- [ ] **FastAPI Server**
-  - `POST /api/render` - Start new render
-  - `GET /api/render/{id}` - Get render status
-  - `DELETE /api/render/{id}` - Cancel render
-  - `GET /api/renders` - List all renders
-  - `GET /api/templates` - List available templates
-
-- [ ] **WebSocket Progress**
-  - Real-time render updates
-  - Step-by-step progress streaming
-  - Error notifications
-
-- [ ] **Job Queue**
-  - Redis for job storage
-  - Celery for background workers
-  - Configurable concurrency
-
-- [ ] **React Frontend Integration**
-  - Connect existing `web/` to FastAPI backend
-  - Real-time progress updates
-  - Render history view
-
----
 
 ### v0.7 - Cloud Storage & Sharing
 **Goal:** Store and share renders in the cloud

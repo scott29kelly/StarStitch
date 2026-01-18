@@ -5,6 +5,7 @@ export { SequenceBuilder } from './SequenceBuilder';
 export { SubjectCard } from './SubjectCard';
 export { RenderView } from './RenderView';
 export { Gallery } from './Gallery';
+export { RenderHistory } from './RenderHistory';
 export { Skeleton, SkeletonCard, SkeletonSubject, SkeletonDashboard } from './Skeleton';
 export { EmptyState } from './EmptyState';
 export { Tooltip } from './Tooltip';
