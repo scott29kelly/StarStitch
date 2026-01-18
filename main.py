@@ -19,7 +19,7 @@ from typing import Optional, Callable
 from dotenv import load_dotenv
 
 from providers import ImageGenerator, VideoGenerator
-from utils import FFmpegUtils, FileManager
+from utils import FFmpegUtils, FileManager, AudioUtils
 
 # Load environment variables
 load_dotenv()
@@ -70,6 +70,7 @@ class StarStitchPipeline:
             model=settings.get("video_model", "fal-ai/kling-video/v1.6/pro/image-to-video")
         )
         self.ffmpeg = FFmpegUtils()
+        self.audio_utils = AudioUtils()
         self.file_manager = FileManager(
             base_output_dir=config.get("output_folder", "renders"),
             project_name=config.get("project_name", "starstitch")
@@ -80,6 +81,10 @@ class StarStitchPipeline:
         self.global_scene = config.get("global_scene", {})
         self.aspect_ratio = settings.get("aspect_ratio", "9:16")
         self.transition_duration = settings.get("transition_duration_sec", 5)
+        
+        # Audio configuration
+        self.audio_config = config.get("audio", {})
+        self.audio_enabled = self.audio_config.get("enabled", False)
     
     def run(self, resume_dir: Optional[Path] = None) -> Path:
         """
@@ -119,6 +124,10 @@ class StarStitchPipeline:
             
             # Step 3: Concatenate final video
             final_path = self._concatenate_final()
+            
+            # Step 4: Add audio track if configured
+            if self.audio_enabled:
+                final_path = self._add_audio_track(final_path)
             
             self.file_manager.set_status("complete")
             self.on_progress(f"Pipeline complete! Output: {final_path}")
@@ -247,6 +256,88 @@ class StarStitchPipeline:
         self.file_manager.cleanup_temp_files()
         
         return final_path
+    
+    def _add_audio_track(self, video_path: Path) -> Path:
+        """
+        Add background audio track to the final video.
+        
+        Args:
+            video_path: Path to the video file to add audio to.
+            
+        Returns:
+            Path to the video with audio (replaces original if successful).
+        """
+        self.on_progress("=== Phase 4: Adding Audio Track ===")
+        
+        audio_path = Path(self.audio_config.get("audio_path", ""))
+        
+        if not audio_path.exists():
+            self.on_progress(f"Warning: Audio file not found: {audio_path}")
+            return video_path
+        
+        if not self.audio_utils.is_supported_format(audio_path):
+            self.on_progress(f"Warning: Unsupported audio format: {audio_path.suffix}")
+            return video_path
+        
+        # Get video duration for audio processing
+        video_duration = self.ffmpeg.get_video_duration(video_path)
+        self.on_progress(f"Video duration: {video_duration:.2f}s")
+        
+        # Get audio settings
+        volume = self.audio_config.get("volume", 0.8)
+        fade_in = self.audio_config.get("fade_in_sec", 1.0)
+        fade_out = self.audio_config.get("fade_out_sec", 2.0)
+        loop = self.audio_config.get("loop", True)
+        normalize = self.audio_config.get("normalize", True)
+        
+        # Prepare audio track (loop/trim, normalize, apply fades)
+        processed_audio_path = self.file_manager.render_dir / "processed_audio.aac"
+        
+        self.on_progress("Processing audio track...")
+        self.on_progress(f"  Volume: {volume * 100:.0f}%")
+        self.on_progress(f"  Fade in: {fade_in}s, Fade out: {fade_out}s")
+        self.on_progress(f"  Loop: {'Yes' if loop else 'No'}, Normalize: {'Yes' if normalize else 'No'}")
+        
+        try:
+            self.audio_utils.prepare_audio_for_video(
+                audio_path=audio_path,
+                output_path=processed_audio_path,
+                video_duration=video_duration,
+                volume=volume,
+                fade_in_sec=fade_in,
+                fade_out_sec=fade_out,
+                loop=loop,
+                normalize=normalize
+            )
+            
+            # Merge audio with video
+            # Create a temp path for the video with audio
+            video_with_audio_path = video_path.parent / f"{video_path.stem}_with_audio{video_path.suffix}"
+            
+            self.on_progress("Merging audio with video...")
+            self.ffmpeg.add_audio_to_video(
+                video_path=video_path,
+                audio_path=processed_audio_path,
+                output_path=video_with_audio_path,
+                replace_existing=True
+            )
+            
+            # Replace original with audio version
+            video_path.unlink(missing_ok=True)
+            video_with_audio_path.rename(video_path)
+            
+            # Clean up processed audio
+            processed_audio_path.unlink(missing_ok=True)
+            
+            self.on_progress(f"Audio track added successfully!")
+            
+            return video_path
+            
+        except Exception as e:
+            self.on_progress(f"Warning: Failed to add audio track: {e}")
+            logger.warning(f"Audio processing failed: {e}")
+            # Return the original video without audio
+            return video_path
 
 
 def load_config(config_path: str) -> dict:

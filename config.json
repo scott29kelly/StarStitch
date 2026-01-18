@@ -11,6 +11,15 @@
     "location_prompt": "taking a selfie at the Eiffel Tower, golden hour lighting, 4k photorealistic",
     "negative_prompt": "blurry, distorted, cartoon, low quality"
   },
+  "audio": {
+    "enabled": false,
+    "audio_path": "",
+    "volume": 0.8,
+    "fade_in_sec": 1.0,
+    "fade_out_sec": 2.0,
+    "loop": true,
+    "normalize": true
+  },
   "sequence": [
     {
       "id": "anchor",
