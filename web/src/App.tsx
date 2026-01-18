@@ -10,7 +10,7 @@ import {
   ToastContainer 
 } from './components';
 import { useToast, useRenderWebSocket } from './hooks';
-import { api, type RenderListItem } from './api/client';
+import { api } from './api/client';
 import type { View, ProjectConfig, RenderProgress, RenderJob } from './types';
 import './index.css';
 
@@ -74,14 +74,12 @@ function App() {
 
   // WebSocket connection for real-time updates
   const { 
-    connectionState, 
     renderState, 
     connect: connectWs, 
-    disconnect: disconnectWs,
     cancel: cancelWs,
   } = useRenderWebSocket(
     // On complete
-    (outputPath, variantPaths) => {
+    () => {
       setRenderProgress(prev => ({
         ...prev,
         status: 'complete',

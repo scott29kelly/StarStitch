@@ -70,6 +70,7 @@ export function useRenderWebSocket(
   const wsRef = useRef<WebSocket | null>(null);
   const heartbeatIntervalRef = useRef<number | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
+  const currentUrlRef = useRef<string | null>(null);
 
   /**
    * Clear all intervals and timeouts
@@ -101,7 +102,7 @@ export function useRenderWebSocket(
           });
           break;
           
-        case 'complete':
+        case 'complete': {
           const outputPath = message.data.output_path as string;
           const variantPaths = (message.data.variant_paths as Record<string, string>) || {};
           setRenderState({
@@ -111,8 +112,9 @@ export function useRenderWebSocket(
           });
           onComplete?.(outputPath, variantPaths);
           break;
+        }
           
-        case 'error':
+        case 'error': {
           const errorMsg = message.data.message as string;
           setRenderState({
             state: 'failed',
@@ -120,6 +122,7 @@ export function useRenderWebSocket(
           });
           onError?.(errorMsg);
           break;
+        }
           
         case 'cancelled':
           setRenderState({
@@ -141,9 +144,9 @@ export function useRenderWebSocket(
   }, [onComplete, onError]);
 
   /**
-   * Connect to WebSocket
+   * Internal connection function
    */
-  const connect = useCallback((wsUrl: string) => {
+  const createConnection = useCallback((wsUrl: string) => {
     // Close existing connection
     if (wsRef.current) {
       wsRef.current.close();
@@ -152,6 +155,7 @@ export function useRenderWebSocket(
 
     setConnectionState('connecting');
     setRenderState(null);
+    currentUrlRef.current = wsUrl;
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
@@ -179,24 +183,27 @@ export function useRenderWebSocket(
       
       if (event.wasClean) {
         setConnectionState('disconnected');
+        currentUrlRef.current = null;
       } else {
         setConnectionState('error');
-        
-        // Attempt to reconnect after 3 seconds
-        reconnectTimeoutRef.current = window.setTimeout(() => {
-          if (wsRef.current === ws) {
-            connect(wsUrl);
-          }
-        }, 3000);
+        // Don't auto-reconnect to avoid connection storms
       }
     };
   }, [clearTimers, handleMessage]);
+
+  /**
+   * Connect to WebSocket
+   */
+  const connect = useCallback((wsUrl: string) => {
+    createConnection(wsUrl);
+  }, [createConnection]);
 
   /**
    * Disconnect from WebSocket
    */
   const disconnect = useCallback(() => {
     clearTimers();
+    currentUrlRef.current = null;
     
     if (wsRef.current) {
       wsRef.current.close();
