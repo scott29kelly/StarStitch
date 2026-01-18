@@ -2,8 +2,9 @@
 # AI Video Morphing Pipeline
 
 # Core API clients
-replicate>=0.25.0
-fal-client>=0.4.0
+replicate>=0.25.0  # Image generation (Flux)
+fal-client>=0.4.0  # Video generation (Kling via Fal.ai)
+# Note: Runway ML and Luma AI use REST APIs via requests
 
 # Video processing
 ffmpeg-python>=0.2.0
@@ -18,3 +19,6 @@ httpx>=0.27.0
 # Utilities
 rich>=13.7.0  # For beautiful console output
 tenacity>=8.2.0  # For retry logic with exponential backoff
+
+# Web UI (optional, for app.py)
+streamlit>=1.32.0

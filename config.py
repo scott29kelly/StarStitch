@@ -65,9 +65,11 @@ class SettingsConfig:
     transition_duration: str = "5"
     image_model: str = "black-forest-labs/flux-1.1-pro"
     video_model: str = "fal-ai/kling-video/v1.6/pro/image-to-video"
+    video_provider: str = "fal"
 
     VALID_ASPECT_RATIOS = ["1:1", "4:3", "3:4", "16:9", "9:16", "21:9", "9:21"]
     VALID_DURATIONS = ["5", "10"]
+    VALID_VIDEO_PROVIDERS = ["fal", "kling", "runway", "luma"]
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "SettingsConfig":
@@ -77,6 +79,7 @@ class SettingsConfig:
             transition_duration=str(data.get("transition_duration", "5")),
             image_model=str(data.get("image_model", cls.image_model)),
             video_model=str(data.get("video_model", cls.video_model)),
+            video_provider=str(data.get("video_provider", "fal")).lower(),
         )
         settings.validate()
         return settings
@@ -95,6 +98,13 @@ class SettingsConfig:
                 f"Invalid transition_duration '{self.transition_duration}'. "
                 f"Valid options: {', '.join(self.VALID_DURATIONS)}",
                 field="settings.transition_duration",
+            )
+
+        if self.video_provider not in self.VALID_VIDEO_PROVIDERS:
+            raise ConfigError(
+                f"Invalid video_provider '{self.video_provider}'. "
+                f"Valid options: {', '.join(self.VALID_VIDEO_PROVIDERS)}",
+                field="settings.video_provider",
             )
 
 
@@ -289,6 +299,7 @@ class StarStitchConfig:
             f"Output: {self.output_folder}/",
             f"Aspect Ratio: {self.settings.aspect_ratio}",
             f"Transition Duration: {self.settings.transition_duration}s",
+            f"Video Provider: {self.settings.video_provider}",
             f"Sequence: {len(self.sequence)} subjects",
             "  Subjects:",
         ]

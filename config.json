@@ -5,6 +5,7 @@
     "aspect_ratio": "9:16",
     "transition_duration": "5",
     "image_model": "black-forest-labs/flux-1.1-pro",
+    "video_provider": "fal",
     "video_model": "fal-ai/kling-video/v1.6/pro/image-to-video"
   },
   "global_scene": {

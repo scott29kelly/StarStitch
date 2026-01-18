@@ -30,7 +30,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from config import ConfigLoader, StarStitchConfig, ConfigError
-from providers import ImageGenerator, VideoGenerator
+from providers import ImageGenerator, create_video_generator
 from providers.base_provider import ImageGenerationError, VideoGenerationError
 from utils import FileManager, FFmpegUtils, StateManager
 from utils.ffmpeg_utils import FFmpegError
@@ -85,10 +85,13 @@ class ChainManager:
                 model=config.settings.image_model,
                 logger=logger,
             )
-            self.video_generator = VideoGenerator(
+            # Use factory to create video generator based on provider setting
+            self.video_generator = create_video_generator(
+                provider=config.settings.video_provider,
                 model=config.settings.video_model,
                 logger=logger,
             )
+            logger.info(f"Using video provider: {self.video_generator.provider_name}")
         else:
             self.image_generator = None
             self.video_generator = None
