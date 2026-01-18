@@ -24,6 +24,7 @@ StarStitch is a Python automation tool that generates seamless "morphing selfie"
 - **Crash Recovery** — Resume capability allows picking up where you left off if generation fails mid-sequence
 - **JSON Configuration** — Swap subjects and scenes without touching code
 - **Modular Design** — Easily swap AI providers as APIs evolve
+- **Modern Web UI** — Beautiful 2026-standard interface with glassmorphism, animations, and intuitive workflows
 
 ---
 
@@ -191,6 +192,15 @@ StarStitch/
 │   ├── __init__.py
 │   ├── ffmpeg_utils.py     # Frame extraction & concatenation
 │   └── file_manager.py     # Asset organization & resume logic
+├── web/                    # React Web UI
+│   ├── src/
+│   │   ├── components/     # UI components
+│   │   ├── hooks/          # Custom React hooks
+│   │   ├── App.tsx         # Main application
+│   │   ├── index.css       # Design system & styles
+│   │   └── types.ts        # TypeScript definitions
+│   ├── package.json
+│   └── vite.config.ts
 └── renders/                # Output directory (generated)
     └── render_{timestamp}/
         ├── manifest.json       # Resume state
@@ -228,10 +238,54 @@ StarStitch/
 
 ---
 
+## 🌐 Web UI
+
+StarStitch now includes a beautiful, modern web interface built with cutting-edge 2026 design standards.
+
+### Features
+
+- **Glassmorphism Design** — Frosted glass cards with subtle depth and shadows
+- **Bento Grid Dashboard** — Modern card-based layout with stats and quick actions
+- **Drag-Drop Sequence Builder** — Intuitive subject ordering with visual feedback
+- **Multi-Step Configuration** — Wizard-style flow for project setup
+- **Real-Time Render Progress** — Animated circular progress with step tracking
+- **Toast Notifications** — Elegant feedback for all actions
+- **Responsive Layout** — Works beautifully on all screen sizes
+
+### Tech Stack
+
+| Component | Technology |
+|-----------|------------|
+| Framework | React 18 + TypeScript |
+| Build Tool | Vite |
+| Styling | Tailwind CSS v4 |
+| Animations | Framer Motion |
+| Drag & Drop | @dnd-kit |
+| Icons | Lucide React |
+
+### Running the Web UI
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Visit `http://localhost:5173` to see the interface.
+
+### Design Highlights
+
+- **Color Palette**: Deep space void with cosmic aurora gradients (indigo → purple → pink)
+- **Typography**: Inter for UI, JetBrains Mono for code
+- **Animations**: Spring-based micro-interactions with 60fps performance
+- **Accessibility**: Focus rings, keyboard navigation, semantic HTML
+
+---
+
 ## 🗺️ Roadmap
 
 - [x] **v0.1** — Core pipeline with Replicate + Fal.ai integration
-- [x] **v0.2** — Web UI for configuration (Streamlit)
+- [x] **v0.2** — Web UI for configuration (Streamlit + React)
 - [ ] **v0.3** — Additional video providers (Runway, Luma)
 - [ ] **v0.4** — Audio track integration
 - [ ] **v0.5** — Batch processing for multiple configs
