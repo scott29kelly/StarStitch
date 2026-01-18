@@ -8,8 +8,10 @@ import json
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Dict, Any
 import uuid
+
+from utils import TemplateLoader, Template, BatchProcessor, BatchSummary
 
 # Page configuration - must be first Streamlit command
 st.set_page_config(
@@ -287,11 +289,20 @@ def init_session_state():
         "audio_fade_out": 2.0,
         "audio_loop": True,
         "audio_normalize": True,
+        # Variants settings (v0.5)
+        "variants_enabled": False,
+        "selected_variants": [],
+        # Template state (v0.5)
+        "selected_template": None,
+        "template_category_filter": "all",
         # Pipeline state
         "pipeline_status": "idle",  # idle, running, paused, complete, error
         "current_step": 0,
         "total_steps": 0,
-        "logs": []
+        "logs": [],
+        # Batch state (v0.5)
+        "batch_status": "idle",
+        "batch_summary": None,
     }
     
     for key, value in defaults.items():
@@ -299,6 +310,12 @@ def init_session_state():
             st.session_state[key] = value
 
 init_session_state()
+
+# Initialize template loader
+@st.cache_resource
+def get_template_loader():
+    """Get cached template loader."""
+    return TemplateLoader()
 
 
 # =============================================================================
@@ -359,7 +376,8 @@ def export_config() -> dict:
             "aspect_ratio": st.session_state.aspect_ratio,
             "transition_duration_sec": st.session_state.transition_duration,
             "image_model": st.session_state.image_model,
-            "video_model": st.session_state.video_model
+            "video_model": st.session_state.video_model,
+            "variants": st.session_state.selected_variants if st.session_state.variants_enabled else []
         },
         "global_scene": {
             "location_prompt": st.session_state.location_prompt,
@@ -377,6 +395,42 @@ def export_config() -> dict:
         "sequence": st.session_state.sequence
     }
     return config
+
+
+def apply_template_to_state(template: Template):
+    """Apply a template to the current session state."""
+    config = template.base_config
+    
+    if "project_name" in config:
+        st.session_state.project_name = config["project_name"]
+    if "output_folder" in config:
+        st.session_state.output_folder = config["output_folder"]
+    if "settings" in config:
+        s = config["settings"]
+        st.session_state.aspect_ratio = s.get("aspect_ratio", "9:16")
+        st.session_state.transition_duration = s.get("transition_duration_sec", 5)
+        st.session_state.image_model = s.get("image_model", st.session_state.image_model)
+        st.session_state.video_model = s.get("video_model", st.session_state.video_model)
+        if "variants" in s:
+            st.session_state.selected_variants = s["variants"]
+            st.session_state.variants_enabled = len(s["variants"]) > 0
+    if "global_scene" in config:
+        g = config["global_scene"]
+        st.session_state.location_prompt = g.get("location_prompt", "")
+        st.session_state.negative_prompt = g.get("negative_prompt", "")
+    if "sequence" in config:
+        st.session_state.sequence = config["sequence"]
+    if "audio" in config:
+        a = config["audio"]
+        st.session_state.audio_enabled = a.get("enabled", False)
+        st.session_state.audio_file_path = a.get("audio_path", "")
+        st.session_state.audio_volume = a.get("volume", 0.8)
+        st.session_state.audio_fade_in = a.get("fade_in_sec", 1.0)
+        st.session_state.audio_fade_out = a.get("fade_out_sec", 2.0)
+        st.session_state.audio_loop = a.get("loop", True)
+        st.session_state.audio_normalize = a.get("normalize", True)
+    
+    st.session_state.selected_template = template.name
 
 
 def add_subject(name: str = "", visual_prompt: str = ""):
@@ -414,11 +468,17 @@ def calculate_estimates() -> dict:
     # Rough estimates based on typical API times
     image_time_sec = 15  # per image
     video_time_sec = 120  # per morph video
+    variant_time_sec = 10  # per variant
     
     total_images = num_subjects
     total_videos = num_morphs
+    total_variants = len(st.session_state.selected_variants) if st.session_state.variants_enabled else 0
     
-    estimated_time_sec = (total_images * image_time_sec) + (total_videos * video_time_sec)
+    estimated_time_sec = (
+        (total_images * image_time_sec) + 
+        (total_videos * video_time_sec) +
+        (total_variants * variant_time_sec)
+    )
     
     # Cost estimates (approximate)
     image_cost = 0.05  # per image
@@ -431,6 +491,7 @@ def calculate_estimates() -> dict:
     return {
         "images": total_images,
         "videos": total_videos,
+        "variants": total_variants,
         "time_minutes": round(estimated_time_sec / 60, 1),
         "cost_usd": round(estimated_cost, 2),
         "final_duration_sec": final_duration
@@ -447,7 +508,7 @@ with st.sidebar:
     <div style="margin-bottom: 2rem;">
         <span style="font-size: 2rem;">🌟</span>
         <span style="font-size: 1.25rem; font-weight: 600; margin-left: 0.5rem;">StarStitch</span>
-        <p style="color: #71717a; font-size: 0.75rem; margin-top: 0.25rem;">v0.4 Audio Integration</p>
+        <p style="color: #71717a; font-size: 0.75rem; margin-top: 0.25rem;">v0.5 Batch Processing & Templates</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -557,13 +618,153 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Tabs for main sections
-tab_sequence, tab_scene, tab_audio, tab_preview, tab_generate = st.tabs([
+tab_templates, tab_sequence, tab_scene, tab_audio, tab_variants, tab_preview, tab_generate = st.tabs([
+    "📁 Templates",
     "📋 Sequence",
     "🎬 Scene",
     "🎵 Audio",
+    "📐 Variants",
     "👁️ Preview",
     "🚀 Generate"
 ])
+
+
+# =============================================================================
+# TAB: TEMPLATES
+# =============================================================================
+
+with tab_templates:
+    st.markdown("### Template Browser")
+    st.markdown("Browse pre-built scene templates to quickly start your project. Templates provide starting configurations that you can customize.")
+    
+    st.markdown("---")
+    
+    # Get template loader
+    template_loader = get_template_loader()
+    all_templates = template_loader.list_templates()
+    
+    if not all_templates:
+        st.markdown("""
+        <div class="empty-state">
+            <div class="empty-state-icon">📁</div>
+            <p>No templates found</p>
+            <p style="font-size: 0.75rem;">Templates should be in the ./templates directory</p>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        # Category filter
+        categories = ["all"] + list(set(t.category for t in all_templates))
+        
+        col_filter, col_search = st.columns([1, 2])
+        
+        with col_filter:
+            selected_category = st.selectbox(
+                "Category",
+                options=categories,
+                index=categories.index(st.session_state.template_category_filter) if st.session_state.template_category_filter in categories else 0,
+                format_func=lambda x: x.capitalize() if x != "all" else "All Categories"
+            )
+            st.session_state.template_category_filter = selected_category
+        
+        with col_search:
+            search_query = st.text_input(
+                "Search templates",
+                placeholder="Search by name, description, or tags..."
+            )
+        
+        st.markdown("---")
+        
+        # Filter templates
+        filtered_templates = all_templates
+        if selected_category != "all":
+            filtered_templates = [t for t in filtered_templates if t.category == selected_category]
+        if search_query:
+            filtered_templates = template_loader.search_templates(search_query)
+            if selected_category != "all":
+                filtered_templates = [t for t in filtered_templates if t.category == selected_category]
+        
+        # Current template indicator
+        if st.session_state.selected_template:
+            st.markdown(f"**Currently using:** `{st.session_state.selected_template}`")
+            if st.button("Clear Template", key="clear_template"):
+                st.session_state.selected_template = None
+                st.rerun()
+            st.markdown("---")
+        
+        # Template grid
+        if filtered_templates:
+            # Display templates in rows of 3
+            for i in range(0, len(filtered_templates), 3):
+                cols = st.columns(3)
+                for j, col in enumerate(cols):
+                    if i + j < len(filtered_templates):
+                        template = filtered_templates[i + j]
+                        with col:
+                            is_selected = st.session_state.selected_template == template.name
+                            
+                            st.markdown(f"""
+                            <div style="
+                                background: {'#2d2d35' if is_selected else '#1a1a1f'};
+                                border: 1px solid {'#8b5cf6' if is_selected else '#27272a'};
+                                border-radius: 12px;
+                                padding: 1rem;
+                                margin-bottom: 0.5rem;
+                                min-height: 180px;
+                            ">
+                                <div style="display: flex; justify-content: space-between; align-items: start;">
+                                    <div>
+                                        <span style="
+                                            background: rgba(139, 92, 246, 0.2);
+                                            color: #a78bfa;
+                                            font-size: 0.65rem;
+                                            padding: 0.2rem 0.5rem;
+                                            border-radius: 9999px;
+                                        ">{template.category.upper()}</span>
+                                    </div>
+                                    {'<span style="color: #22c55e;">✓</span>' if is_selected else ''}
+                                </div>
+                                <h4 style="margin: 0.5rem 0 0.25rem 0; color: #fafafa; font-size: 1rem;">
+                                    {template.display_name}
+                                </h4>
+                                <p style="color: #71717a; font-size: 0.75rem; margin: 0;">
+                                    {template.description[:80]}{'...' if len(template.description) > 80 else ''}
+                                </p>
+                                <div style="margin-top: 0.5rem;">
+                                    {''.join([f'<span style="background: #27272a; color: #a1a1aa; font-size: 0.6rem; padding: 0.15rem 0.4rem; border-radius: 4px; margin-right: 0.25rem;">{tag}</span>' for tag in template.tags[:3]])}
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                            if st.button(
+                                "Use Template" if not is_selected else "Selected",
+                                key=f"use_template_{template.name}",
+                                disabled=is_selected,
+                                use_container_width=True
+                            ):
+                                apply_template_to_state(template)
+                                st.success(f"Applied template: {template.display_name}")
+                                st.rerun()
+        else:
+            st.markdown("""
+            <div class="empty-state">
+                <div class="empty-state-icon">🔍</div>
+                <p>No templates match your search</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
+        # Template stats
+        st.markdown("##### Template Library Stats")
+        stats_cols = st.columns(4)
+        
+        category_counts = {}
+        for t in all_templates:
+            category_counts[t.category] = category_counts.get(t.category, 0) + 1
+        
+        for i, (cat, count) in enumerate(category_counts.items()):
+            with stats_cols[i % 4]:
+                st.metric(cat.capitalize(), count)
 
 
 # =============================================================================
@@ -863,6 +1064,120 @@ with tab_audio:
 
 
 # =============================================================================
+# TAB: VARIANTS
+# =============================================================================
+
+with tab_variants:
+    st.markdown("### Output Variants")
+    st.markdown("Generate multiple aspect ratio versions of your final video from a single render. Perfect for multi-platform distribution.")
+    
+    st.markdown("---")
+    
+    # Enable/disable variants
+    col_toggle, col_spacer = st.columns([1, 2])
+    with col_toggle:
+        st.session_state.variants_enabled = st.toggle(
+            "Enable Variants",
+            value=st.session_state.variants_enabled,
+            help="Generate additional aspect ratio versions"
+        )
+    
+    if st.session_state.variants_enabled:
+        st.markdown("---")
+        
+        st.markdown("##### Select Output Formats")
+        st.markdown("Choose which aspect ratios to generate. Your primary ratio is automatically included.")
+        
+        # Available variants with descriptions
+        variant_options = {
+            "9:16": {"name": "TikTok / Reels", "desc": "Vertical (1080x1920)", "icon": "📱"},
+            "16:9": {"name": "YouTube / Landscape", "desc": "Horizontal (1920x1080)", "icon": "🖥️"},
+            "1:1": {"name": "Instagram / Square", "desc": "Square (1080x1080)", "icon": "⬜"},
+            "4:5": {"name": "Instagram / Portrait", "desc": "Portrait (1080x1350)", "icon": "📷"},
+            "4:3": {"name": "Standard", "desc": "Classic (1440x1080)", "icon": "📺"},
+        }
+        
+        # Current primary ratio
+        primary_ratio = st.session_state.aspect_ratio
+        st.markdown(f"**Primary ratio:** {primary_ratio} (from settings)")
+        
+        st.markdown("---")
+        
+        # Variant checkboxes
+        selected = []
+        
+        cols = st.columns(3)
+        
+        for i, (ratio, info) in enumerate(variant_options.items()):
+            col = cols[i % 3]
+            with col:
+                is_primary = ratio == primary_ratio
+                
+                if is_primary:
+                    st.markdown(f"""
+                    <div style="
+                        background: rgba(34, 197, 94, 0.1);
+                        border: 1px solid #22c55e;
+                        border-radius: 8px;
+                        padding: 0.75rem;
+                        margin-bottom: 0.5rem;
+                    ">
+                        <span style="font-size: 1.25rem;">{info['icon']}</span>
+                        <span style="font-weight: 500; color: #22c55e; margin-left: 0.5rem;">{ratio}</span>
+                        <span style="color: #71717a; font-size: 0.75rem; display: block;">{info['name']}</span>
+                        <span style="color: #22c55e; font-size: 0.65rem;">PRIMARY</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    checked = ratio in st.session_state.selected_variants
+                    if st.checkbox(
+                        f"{info['icon']} {ratio} - {info['name']}",
+                        value=checked,
+                        key=f"variant_{ratio}"
+                    ):
+                        selected.append(ratio)
+        
+        st.session_state.selected_variants = selected
+        
+        st.markdown("---")
+        
+        # Summary
+        st.markdown("##### Variant Summary")
+        
+        total_variants = len(selected)
+        variant_list = [primary_ratio] + selected
+        
+        st.markdown(f"**Total outputs:** {total_variants + 1} videos")
+        st.markdown(f"**Formats:** {', '.join(variant_list)}")
+        
+        if total_variants > 0:
+            st.markdown("""
+            <div style="
+                background: rgba(139, 92, 246, 0.1);
+                border: 1px solid #8b5cf6;
+                border-radius: 8px;
+                padding: 0.75rem;
+                margin-top: 1rem;
+            ">
+                <span style="color: #a78bfa;">ℹ️</span>
+                <span style="color: #a1a1aa; font-size: 0.85rem;">
+                    Variants are created by cropping and scaling the final video. 
+                    Center framing works best for multi-ratio output.
+                </span>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    else:
+        st.markdown("""
+        <div class="empty-state">
+            <div class="empty-state-icon">📐</div>
+            <p>Variants are disabled</p>
+            <p style="font-size: 0.75rem;">Enable to generate multiple aspect ratio versions</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+
+# =============================================================================
 # TAB: PREVIEW
 # =============================================================================
 
@@ -911,32 +1226,41 @@ with tab_preview:
     # Summary stats
     st.markdown("##### Estimates")
     
-    est_cols = st.columns(4)
+    estimates_preview = calculate_estimates()
+    
+    est_cols = st.columns(5)
     with est_cols[0]:
         st.markdown(f"""
         <div class="metric-card">
-            <div class="metric-value">{estimates['images']}</div>
+            <div class="metric-value">{estimates_preview['images']}</div>
             <div class="metric-label">Images</div>
         </div>
         """, unsafe_allow_html=True)
     with est_cols[1]:
         st.markdown(f"""
         <div class="metric-card">
-            <div class="metric-value">{estimates['videos']}</div>
+            <div class="metric-value">{estimates_preview['videos']}</div>
             <div class="metric-label">Videos</div>
         </div>
         """, unsafe_allow_html=True)
     with est_cols[2]:
         st.markdown(f"""
         <div class="metric-card">
-            <div class="metric-value">~{estimates['time_minutes']}m</div>
-            <div class="metric-label">Gen Time</div>
+            <div class="metric-value">{estimates_preview['variants']}</div>
+            <div class="metric-label">Variants</div>
         </div>
         """, unsafe_allow_html=True)
     with est_cols[3]:
         st.markdown(f"""
         <div class="metric-card">
-            <div class="metric-value">${estimates['cost_usd']}</div>
+            <div class="metric-value">~{estimates_preview['time_minutes']}m</div>
+            <div class="metric-label">Gen Time</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with est_cols[4]:
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-value">${estimates_preview['cost_usd']}</div>
             <div class="metric-label">Est. Cost</div>
         </div>
         """, unsafe_allow_html=True)
@@ -1008,6 +1332,20 @@ with tab_generate:
             checks.append(("✓", f"Audio: {Path(st.session_state.audio_file_path).name}", True))
     else:
         checks.append(("ℹ️", "Audio track disabled (optional)", True))
+    
+    # Check variants (v0.5)
+    if st.session_state.variants_enabled:
+        num_variants = len(st.session_state.selected_variants)
+        if num_variants > 0:
+            checks.append(("✓", f"Variants: {num_variants} additional format(s)", True))
+        else:
+            checks.append(("ℹ️", "Variants enabled but none selected", True))
+    else:
+        checks.append(("ℹ️", "Output variants disabled (optional)", True))
+    
+    # Template info (v0.5)
+    if st.session_state.selected_template:
+        checks.append(("ℹ️", f"Using template: {st.session_state.selected_template}", True))
     
     # Display checks
     for icon, message, passed in checks:
@@ -1085,6 +1423,6 @@ with tab_generate:
 st.markdown("---")
 st.markdown("""
 <div style="text-align: center; color: #71717a; font-size: 0.75rem; padding: 1rem 0;">
-    StarStitch v0.4 — Audio Integration — Built with Streamlit
+    StarStitch v0.5 — Batch Processing & Templates — Built with Streamlit
 </div>
 """, unsafe_allow_html=True)

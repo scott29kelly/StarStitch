@@ -31,38 +31,37 @@
 - EBU R128 loudness normalization
 - Audio tab in Web UI
 
+### v0.5 - Batch Processing & Templates ✅
+- **Batch Configuration**
+  - Accept directory of config files (`--batch` CLI flag)
+  - Sequential processing with summary report
+  - Skip already-completed renders
+  - Graceful interruption with resume capability
+  - Manifest-based progress tracking
+
+- **Template System**
+  - Pre-built scene templates in `templates/` folder
+  - Categories: viral, holidays, events, themes (12+ templates)
+  - `--template` flag to use templates
+  - `--list-templates` to view available templates
+  - Template browser in Web UI with search and filtering
+
+- **Queue Manager**
+  - Batch progress tracking in manifest
+  - Estimated completion times based on historical averages
+  - Graceful interruption with SIGINT/SIGTERM handling
+  - Resume capability for interrupted batches
+
+- **Output Variants**
+  - Generate multiple aspect ratios from single run
+  - Formats: 9:16, 16:9, 1:1, 4:5, 4:3, 3:4
+  - `--variants` CLI flag
+  - FFMPEG-based intelligent cropping (center-focused)
+  - Variants tab in Web UI
+
 ---
 
 ## In Progress
-
-### v0.5 - Batch Processing & Templates
-**Goal:** Process multiple configs and provide reusable templates
-
-- [ ] **Batch Configuration**
-  - Accept directory of config files
-  - Sequential processing with summary report
-  - `--batch` CLI flag
-
-- [ ] **Template System**
-  - Pre-built scene templates in `templates/` folder
-  - Categories: viral, holidays, events, themes
-  - `--template` flag to use templates
-  - Template browser in Web UI
-
-- [ ] **Queue Manager**
-  - Priority-based job queue
-  - Pause/resume functionality
-  - Estimated completion times
-  - Queue status display
-
-- [ ] **Output Variants**
-  - Generate multiple aspect ratios from single run
-  - Formats: 9:16 (TikTok), 16:9 (YouTube), 1:1 (Instagram)
-  - `--variants` flag
-
----
-
-## Planned
 
 ### v0.6 - API Backend
 **Goal:** RESTful API for programmatic access and React frontend integration

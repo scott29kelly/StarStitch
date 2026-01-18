@@ -5,6 +5,7 @@ Configuration loader and validator for StarStitch.
 import json
 from pathlib import Path
 from typing import Dict, Any, List, Optional
+from dataclasses import field
 from dataclasses import dataclass, field
 
 # Re-export AudioSettings for external use
@@ -70,6 +71,11 @@ class Settings:
     transition_duration_sec: int = 5
     image_model: str = "black-forest-labs/flux-1.1-pro"
     video_model: str = "fal-ai/kling-video/v1.6/pro/image-to-video"
+    variants: List[str] = None  # Output variants like ["16:9", "1:1"]
+    
+    def __post_init__(self):
+        if self.variants is None:
+            self.variants = []
 
 
 @dataclass
@@ -90,7 +96,8 @@ class StarStitchConfig:
             aspect_ratio=settings_data.get("aspect_ratio", "9:16"),
             transition_duration_sec=settings_data.get("transition_duration_sec", 5),
             image_model=settings_data.get("image_model", "black-forest-labs/flux-1.1-pro"),
-            video_model=settings_data.get("video_model", "fal-ai/kling-video/v1.6/pro/image-to-video")
+            video_model=settings_data.get("video_model", "fal-ai/kling-video/v1.6/pro/image-to-video"),
+            variants=settings_data.get("variants", [])
         )
         
         scene_data = data.get("global_scene", {})
@@ -137,7 +144,8 @@ class StarStitchConfig:
                 "aspect_ratio": self.settings.aspect_ratio,
                 "transition_duration_sec": self.settings.transition_duration_sec,
                 "image_model": self.settings.image_model,
-                "video_model": self.settings.video_model
+                "video_model": self.settings.video_model,
+                "variants": self.settings.variants
             },
             "global_scene": {
                 "location_prompt": self.global_scene.location_prompt,
@@ -188,9 +196,15 @@ class StarStitchConfig:
             if not subject.visual_prompt:
                 errors.append(f"Subject '{subject.name}' is missing a visual prompt")
         
-        valid_ratios = ["9:16", "16:9", "1:1", "4:3", "3:4"]
+        valid_ratios = ["9:16", "16:9", "1:1", "4:3", "3:4", "4:5"]
         if self.settings.aspect_ratio not in valid_ratios:
             errors.append(f"Invalid aspect ratio. Must be one of: {valid_ratios}")
+        
+        # Validate variants if specified
+        if self.settings.variants:
+            for variant in self.settings.variants:
+                if variant not in valid_ratios:
+                    errors.append(f"Invalid variant ratio '{variant}'. Must be one of: {valid_ratios}")
         
         if not 2 <= self.settings.transition_duration_sec <= 10:
             errors.append("Transition duration must be between 2 and 10 seconds")

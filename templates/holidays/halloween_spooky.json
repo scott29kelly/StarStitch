@@ -1,0 +1,48 @@
+{
+  "name": "halloween_spooky",
+  "display_name": "Halloween Spooky",
+  "description": "Spooky Halloween transformations with costumes and creatures",
+  "category": "holidays",
+  "tags": ["halloween", "spooky", "costume", "scary", "monster", "horror"],
+  "author": "StarStitch",
+  "version": "1.0",
+  "base_config": {
+    "project_name": "halloween_morph",
+    "output_folder": "renders",
+    "settings": {
+      "aspect_ratio": "9:16",
+      "transition_duration_sec": 5,
+      "image_model": "black-forest-labs/flux-1.1-pro",
+      "video_model": "fal-ai/kling-video/v1.6/pro/image-to-video"
+    },
+    "global_scene": {
+      "location_prompt": "spooky Halloween night, full moon, misty graveyard background, orange and purple lighting, atmospheric fog, 4k",
+      "negative_prompt": "blurry, distorted, low quality, too bright, daylight"
+    },
+    "audio": {
+      "enabled": false,
+      "volume": 0.7,
+      "fade_in_sec": 1.0,
+      "fade_out_sec": 2.0,
+      "loop": true,
+      "normalize": true
+    },
+    "sequence": [
+      {
+        "id": "human",
+        "name": "Normal Self",
+        "visual_prompt": "Person with neutral expression, casual clothes"
+      },
+      {
+        "id": "vampire",
+        "name": "Vampire",
+        "visual_prompt": "Elegant vampire with pale skin, sharp fangs, dark cape, mysterious gaze"
+      },
+      {
+        "id": "werewolf",
+        "name": "Werewolf",
+        "visual_prompt": "Werewolf with fur, glowing eyes, pointed ears, fierce expression"
+      }
+    ]
+  }
+}

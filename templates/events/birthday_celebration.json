@@ -1,0 +1,43 @@
+{
+  "name": "birthday_celebration",
+  "display_name": "Birthday Celebration",
+  "description": "Fun birthday party morphs with cake and celebrations",
+  "category": "events",
+  "tags": ["birthday", "party", "celebration", "cake", "balloons"],
+  "author": "StarStitch",
+  "version": "1.0",
+  "base_config": {
+    "project_name": "birthday_morph",
+    "output_folder": "renders",
+    "settings": {
+      "aspect_ratio": "9:16",
+      "transition_duration_sec": 4,
+      "image_model": "black-forest-labs/flux-1.1-pro",
+      "video_model": "fal-ai/kling-video/v1.6/pro/image-to-video"
+    },
+    "global_scene": {
+      "location_prompt": "birthday party setting, colorful balloons, confetti, birthday cake with candles, festive decorations, happy atmosphere, 4k",
+      "negative_prompt": "blurry, distorted, cartoon, low quality, sad, dark"
+    },
+    "audio": {
+      "enabled": false,
+      "volume": 0.7,
+      "fade_in_sec": 0.5,
+      "fade_out_sec": 2.0,
+      "loop": true,
+      "normalize": true
+    },
+    "sequence": [
+      {
+        "id": "child",
+        "name": "Birthday Person",
+        "visual_prompt": "Happy person wearing party hat, excited expression, standing near cake"
+      },
+      {
+        "id": "adult",
+        "name": "Grown Up",
+        "visual_prompt": "Same person as adult, sophisticated, blowing out candles"
+      }
+    ]
+  }
+}

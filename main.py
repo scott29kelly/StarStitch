@@ -4,9 +4,12 @@ StarStitch - AI-Powered Video Morphing Pipeline
 Main entry point for CLI-based generation.
 
 Usage:
-    python main.py                          # Use default config.json
-    python main.py --config custom.json     # Use custom config
-    python main.py --resume renders/render_20250117_143022  # Resume a crashed render
+    python main.py                              # Use default config.json
+    python main.py --config custom.json         # Use custom config
+    python main.py --resume renders/render_...  # Resume a crashed render
+    python main.py --batch ./batch_configs/     # Process batch directory
+    python main.py --template tiktok_celeb_morph  # Use a template
+    python main.py --variants 16:9,1:1          # Generate multiple aspect ratios
 """
 
 import argparse
@@ -14,12 +17,12 @@ import json
 import logging
 import sys
 from pathlib import Path
-from typing import Optional, Callable
+from typing import Optional, Callable, List, Dict, Any
 
 from dotenv import load_dotenv
 
 from providers import ImageGenerator, VideoGenerator
-from utils import FFmpegUtils, FileManager, AudioUtils
+from utils import FFmpegUtils, FileManager, AudioUtils, BatchProcessor, TemplateLoader
 
 # Load environment variables
 load_dotenv()
@@ -47,7 +50,8 @@ class StarStitchPipeline:
     def __init__(
         self,
         config: dict,
-        on_progress: Optional[Callable[[str], None]] = None
+        on_progress: Optional[Callable[[str], None]] = None,
+        variants_override: Optional[List[str]] = None
     ):
         """
         Initialize the pipeline.
@@ -55,6 +59,7 @@ class StarStitchPipeline:
         Args:
             config: Configuration dictionary.
             on_progress: Optional callback for progress updates.
+            variants_override: Optional list of aspect ratio variants to generate.
         """
         self.config = config
         self.on_progress = on_progress or (lambda msg: logger.info(msg))
@@ -82,6 +87,9 @@ class StarStitchPipeline:
         self.aspect_ratio = settings.get("aspect_ratio", "9:16")
         self.transition_duration = settings.get("transition_duration_sec", 5)
         
+        # Variants configuration (CLI override takes precedence)
+        self.variants = variants_override or settings.get("variants", [])
+        
         # Audio configuration
         self.audio_config = config.get("audio", {})
         self.audio_enabled = self.audio_config.get("enabled", False)
@@ -105,15 +113,17 @@ class StarStitchPipeline:
             self.file_manager.create_render_session()
             self.file_manager.save_config(self.config)
         
-        # Calculate total steps: images + videos
+        # Calculate total steps: images + videos + variants
         num_subjects = len(self.sequence)
         num_morphs = max(0, num_subjects - 1)
-        total_steps = num_subjects + num_morphs
+        num_variants = len(self.variants)
+        total_steps = num_subjects + num_morphs + (1 if num_variants > 0 else 0)
         
         self.file_manager.set_total_steps(total_steps)
         self.file_manager.set_status("running")
         
-        self.on_progress(f"Pipeline started: {num_subjects} subjects, {num_morphs} morphs")
+        variant_info = f", {num_variants} variants" if num_variants > 0 else ""
+        self.on_progress(f"Pipeline started: {num_subjects} subjects, {num_morphs} morphs{variant_info}")
         
         try:
             # Step 1: Generate all subject images
@@ -129,8 +139,18 @@ class StarStitchPipeline:
             if self.audio_enabled:
                 final_path = self._add_audio_track(final_path)
             
+            # Step 5: Generate variants if configured
+            variant_paths = {}
+            if self.variants:
+                variant_paths = self._generate_variants(final_path)
+            
             self.file_manager.set_status("complete")
             self.on_progress(f"Pipeline complete! Output: {final_path}")
+            
+            if variant_paths:
+                self.on_progress(f"Variants generated: {len(variant_paths)}")
+                for ratio, path in variant_paths.items():
+                    self.on_progress(f"  - {ratio}: {path}")
             
             return final_path
             
@@ -338,6 +358,47 @@ class StarStitchPipeline:
             logger.warning(f"Audio processing failed: {e}")
             # Return the original video without audio
             return video_path
+    
+    def _generate_variants(self, video_path: Path) -> Dict[str, Path]:
+        """
+        Generate multiple aspect ratio variants of the final video.
+        
+        Args:
+            video_path: Path to the final video.
+            
+        Returns:
+            Dictionary mapping aspect ratio to output path.
+        """
+        self.on_progress("=== Phase 5: Generating Variants ===")
+        
+        if not self.variants:
+            return {}
+        
+        self.on_progress(f"Creating {len(self.variants)} aspect ratio variants...")
+        
+        # Create variants directory
+        variants_dir = self.file_manager.render_dir / "variants"
+        variants_dir.mkdir(exist_ok=True)
+        
+        try:
+            # Get standard scale map for quality output
+            scale_map = self.ffmpeg.get_standard_scale_map()
+            
+            variant_paths = self.ffmpeg.create_all_variants(
+                input_path=video_path,
+                variants=self.variants,
+                output_dir=variants_dir,
+                scale_map=scale_map
+            )
+            
+            self.on_progress(f"Generated {len(variant_paths)} variants successfully")
+            
+            return variant_paths
+            
+        except Exception as e:
+            self.on_progress(f"Warning: Variant generation failed: {e}")
+            logger.warning(f"Variant generation failed: {e}")
+            return {}
 
 
 def load_config(config_path: str) -> dict:
@@ -351,6 +412,45 @@ def load_config(config_path: str) -> dict:
         return json.load(f)
 
 
+def list_templates():
+    """List all available templates."""
+    loader = TemplateLoader()
+    templates = loader.list_templates()
+    
+    if not templates:
+        print("No templates found. Create templates in the ./templates directory.")
+        return
+    
+    print("\n📋 Available Templates:\n")
+    
+    current_category = None
+    for template in templates:
+        if template.category != current_category:
+            current_category = template.category
+            print(f"\n  {current_category.upper()}")
+            print("  " + "-" * 40)
+        
+        print(f"    {template.name:30s} - {template.description[:50]}")
+    
+    print()
+
+
+def run_batch(batch_dir: Path, verbose: bool = False):
+    """Run batch processing on a directory."""
+    
+    def create_pipeline(config: Dict[str, Any]) -> StarStitchPipeline:
+        return StarStitchPipeline(config)
+    
+    processor = BatchProcessor(
+        batch_dir=batch_dir,
+        on_progress=lambda msg: print(msg)
+    )
+    
+    summary = processor.run(pipeline_factory=create_pipeline, resume=True)
+    
+    return 0 if summary.failed == 0 else 1
+
+
 def main():
     """CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -358,9 +458,13 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python main.py                          # Use default config.json
-  python main.py --config custom.json     # Use custom config
-  python main.py --resume renders/render_20250117_143022
+  python main.py                              # Use default config.json
+  python main.py --config custom.json         # Use custom config
+  python main.py --resume renders/render_...  # Resume a crashed render
+  python main.py --batch ./batch_configs/     # Process batch directory
+  python main.py --template tiktok_celeb_morph  # Use a template
+  python main.py --variants 16:9,1:1          # Generate multiple aspect ratios
+  python main.py --list-templates             # List available templates
         """
     )
     
@@ -374,6 +478,30 @@ Examples:
         "--resume", "-r",
         default=None,
         help="Path to render directory to resume"
+    )
+    
+    parser.add_argument(
+        "--batch", "-b",
+        default=None,
+        help="Path to directory containing multiple config files to process"
+    )
+    
+    parser.add_argument(
+        "--template", "-t",
+        default=None,
+        help="Name of template to use as base configuration"
+    )
+    
+    parser.add_argument(
+        "--list-templates",
+        action="store_true",
+        help="List all available templates and exit"
+    )
+    
+    parser.add_argument(
+        "--variants",
+        default=None,
+        help="Comma-separated aspect ratios to generate (e.g., '16:9,1:1,9:16')"
     )
     
     parser.add_argument(
@@ -391,17 +519,57 @@ Examples:
     print("""
     ╔═══════════════════════════════════════════════════════════╗
     ║                                                           ║
-    ║   🌟  S T A R S T I T C H                                 ║
+    ║   🌟  S T A R S T I T C H  v0.5                           ║
     ║                                                           ║
     ║   AI-Powered Video Morphing Pipeline                      ║
+    ║   Batch Processing & Templates Edition                    ║
     ║                                                           ║
     ╚═══════════════════════════════════════════════════════════╝
     """)
     
+    # Handle list-templates command
+    if args.list_templates:
+        list_templates()
+        sys.exit(0)
+    
+    # Handle batch mode
+    if args.batch:
+        batch_path = Path(args.batch)
+        if not batch_path.exists():
+            logger.error(f"Batch directory not found: {batch_path}")
+            sys.exit(1)
+        
+        logger.info(f"Starting batch processing: {batch_path}")
+        exit_code = run_batch(batch_path, args.verbose)
+        sys.exit(exit_code)
+    
     try:
-        # Load config
-        logger.info(f"Loading config from: {args.config}")
-        config = load_config(args.config)
+        # Parse variants if provided
+        variants_list = None
+        if args.variants:
+            variants_list = [v.strip() for v in args.variants.split(",")]
+            logger.info(f"Variants requested: {variants_list}")
+        
+        # Load config - apply template if specified
+        if args.template:
+            logger.info(f"Using template: {args.template}")
+            loader = TemplateLoader()
+            
+            # Load base config if it exists, otherwise start fresh
+            if Path(args.config).exists():
+                config = load_config(args.config)
+            else:
+                config = {}
+            
+            try:
+                config = loader.apply_template(args.template, config)
+            except ValueError as e:
+                logger.error(str(e))
+                print("\nRun 'python main.py --list-templates' to see available templates.")
+                sys.exit(1)
+        else:
+            logger.info(f"Loading config from: {args.config}")
+            config = load_config(args.config)
         
         # Validate minimum requirements
         sequence = config.get("sequence", [])
@@ -412,8 +580,14 @@ Examples:
         logger.info(f"Project: {config.get('project_name', 'unnamed')}")
         logger.info(f"Subjects: {len(sequence)}")
         
+        if variants_list:
+            logger.info(f"Generating variants: {', '.join(variants_list)}")
+        
         # Create and run pipeline
-        pipeline = StarStitchPipeline(config)
+        pipeline = StarStitchPipeline(
+            config,
+            variants_override=variants_list
+        )
         
         resume_path = Path(args.resume) if args.resume else None
         final_video = pipeline.run(resume_dir=resume_path)

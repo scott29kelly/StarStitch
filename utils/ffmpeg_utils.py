@@ -7,6 +7,7 @@ import subprocess
 import logging
 from pathlib import Path
 from typing import List, Optional, Dict, Any
+import shutil
 
 logger = logging.getLogger(__name__)
 
@@ -449,3 +450,247 @@ class FFmpegUtils:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         
         return "audio" in result.stdout.lower()
+    
+    def get_video_dimensions(self, video_path: Path) -> tuple:
+        """
+        Get the width and height of a video.
+        
+        Args:
+            video_path: Path to the video file.
+            
+        Returns:
+            Tuple of (width, height).
+        """
+        cmd = [
+            "ffprobe",
+            "-v", "error",
+            "-select_streams", "v:0",
+            "-show_entries", "stream=width,height",
+            "-of", "csv=p=0:s=x",
+            str(video_path)
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        
+        if result.returncode != 0:
+            raise RuntimeError(f"Failed to get dimensions: {result.stderr}")
+        
+        parts = result.stdout.strip().split("x")
+        return int(parts[0]), int(parts[1])
+    
+    def parse_aspect_ratio(self, ratio_str: str) -> tuple:
+        """
+        Parse aspect ratio string to width/height tuple.
+        
+        Args:
+            ratio_str: Aspect ratio string like "16:9" or "9:16".
+            
+        Returns:
+            Tuple of (width_ratio, height_ratio).
+        """
+        parts = ratio_str.split(":")
+        if len(parts) != 2:
+            raise ValueError(f"Invalid aspect ratio format: {ratio_str}")
+        
+        return int(parts[0]), int(parts[1])
+    
+    def calculate_crop_dimensions(
+        self,
+        src_width: int,
+        src_height: int,
+        target_ratio: tuple
+    ) -> tuple:
+        """
+        Calculate crop dimensions for a target aspect ratio.
+        
+        This calculates the largest possible crop area that fits
+        the target aspect ratio within the source dimensions.
+        
+        Args:
+            src_width: Source video width.
+            src_height: Source video height.
+            target_ratio: Target aspect ratio as (w, h).
+            
+        Returns:
+            Tuple of (crop_width, crop_height, x_offset, y_offset).
+        """
+        target_w, target_h = target_ratio
+        target_aspect = target_w / target_h
+        src_aspect = src_width / src_height
+        
+        if target_aspect > src_aspect:
+            # Target is wider - crop top/bottom
+            crop_width = src_width
+            crop_height = int(src_width / target_aspect)
+            x_offset = 0
+            y_offset = (src_height - crop_height) // 2
+        else:
+            # Target is taller - crop left/right
+            crop_height = src_height
+            crop_width = int(src_height * target_aspect)
+            x_offset = (src_width - crop_width) // 2
+            y_offset = 0
+        
+        # Ensure even dimensions (required by most codecs)
+        crop_width = crop_width - (crop_width % 2)
+        crop_height = crop_height - (crop_height % 2)
+        
+        return crop_width, crop_height, x_offset, y_offset
+    
+    def create_aspect_ratio_variant(
+        self,
+        input_path: Path,
+        output_path: Path,
+        target_ratio: str,
+        scale_width: Optional[int] = None
+    ) -> Path:
+        """
+        Create an aspect ratio variant of a video.
+        
+        This crops the video to the target aspect ratio, centering
+        on the middle of the frame.
+        
+        Args:
+            input_path: Path to the input video.
+            output_path: Path for the output video.
+            target_ratio: Target aspect ratio (e.g., "16:9", "1:1").
+            scale_width: Optional width to scale to after cropping.
+            
+        Returns:
+            Path to the output video.
+        """
+        input_path = Path(input_path)
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        if not input_path.exists():
+            raise FileNotFoundError(f"Video not found: {input_path}")
+        
+        # Get source dimensions
+        src_width, src_height = self.get_video_dimensions(input_path)
+        target_w, target_h = self.parse_aspect_ratio(target_ratio)
+        
+        # Calculate crop dimensions
+        crop_w, crop_h, x_off, y_off = self.calculate_crop_dimensions(
+            src_width, src_height, (target_w, target_h)
+        )
+        
+        logger.info(f"Creating variant: {target_ratio} ({src_width}x{src_height} -> {crop_w}x{crop_h})")
+        
+        # Build filter chain
+        filters = [f"crop={crop_w}:{crop_h}:{x_off}:{y_off}"]
+        
+        # Add scaling if requested
+        if scale_width:
+            scale_height = int(scale_width / (target_w / target_h))
+            # Ensure even dimensions
+            scale_height = scale_height - (scale_height % 2)
+            filters.append(f"scale={scale_width}:{scale_height}")
+        
+        filter_str = ",".join(filters)
+        
+        cmd = [
+            self.ffmpeg_path,
+            "-y",
+            "-i", str(input_path),
+            "-vf", filter_str,
+            "-c:v", "libx264",
+            "-preset", "fast",
+            "-crf", "23",
+            "-c:a", "copy",
+            str(output_path)
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        
+        if result.returncode != 0:
+            raise RuntimeError(f"Failed to create variant: {result.stderr}")
+        
+        logger.info(f"Variant created: {output_path}")
+        return output_path
+    
+    def create_all_variants(
+        self,
+        input_path: Path,
+        variants: List[str],
+        output_dir: Optional[Path] = None,
+        scale_map: Optional[Dict[str, int]] = None
+    ) -> Dict[str, Path]:
+        """
+        Create multiple aspect ratio variants from a single video.
+        
+        Args:
+            input_path: Path to the input video.
+            variants: List of aspect ratio strings (e.g., ["16:9", "1:1", "9:16"]).
+            output_dir: Directory for output files. Defaults to input directory.
+            scale_map: Optional dict mapping ratio to target width.
+            
+        Returns:
+            Dictionary mapping variant names to output paths.
+        """
+        input_path = Path(input_path)
+        
+        if output_dir is None:
+            output_dir = input_path.parent
+        else:
+            output_dir = Path(output_dir)
+        
+        output_dir.mkdir(parents=True, exist_ok=True)
+        scale_map = scale_map or {}
+        
+        # Get source aspect ratio to skip if same
+        src_width, src_height = self.get_video_dimensions(input_path)
+        src_aspect = src_width / src_height
+        
+        results = {}
+        stem = input_path.stem
+        suffix = input_path.suffix
+        
+        for variant in variants:
+            target_w, target_h = self.parse_aspect_ratio(variant)
+            target_aspect = target_w / target_h
+            
+            # Skip if aspect ratio matches source (within tolerance)
+            if abs(src_aspect - target_aspect) < 0.01:
+                logger.info(f"Skipping variant {variant} (matches source)")
+                # Just copy the original
+                variant_name = variant.replace(":", "x")
+                output_path = output_dir / f"{stem}_{variant_name}{suffix}"
+                if not output_path.exists():
+                    shutil.copy(input_path, output_path)
+                results[variant] = output_path
+                continue
+            
+            variant_name = variant.replace(":", "x")
+            output_path = output_dir / f"{stem}_{variant_name}{suffix}"
+            
+            scale_width = scale_map.get(variant)
+            
+            try:
+                self.create_aspect_ratio_variant(
+                    input_path,
+                    output_path,
+                    variant,
+                    scale_width
+                )
+                results[variant] = output_path
+            except Exception as e:
+                logger.error(f"Failed to create variant {variant}: {e}")
+        
+        return results
+    
+    def get_standard_scale_map(self) -> Dict[str, int]:
+        """
+        Get standard scale widths for common aspect ratios.
+        
+        Returns:
+            Dictionary mapping ratio strings to recommended widths.
+        """
+        return {
+            "9:16": 1080,   # TikTok/Reels (1080x1920)
+            "16:9": 1920,   # YouTube landscape (1920x1080)
+            "1:1": 1080,    # Instagram square (1080x1080)
+            "4:3": 1440,    # Standard (1440x1080)
+            "3:4": 1080,    # Portrait standard (1080x1440)
+            "4:5": 1080,    # Instagram portrait (1080x1350)
+        }

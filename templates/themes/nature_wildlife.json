@@ -1,0 +1,48 @@
+{
+  "name": "nature_wildlife",
+  "display_name": "Nature & Wildlife",
+  "description": "Beautiful nature and animal transformations",
+  "category": "themes",
+  "tags": ["nature", "wildlife", "animals", "forest", "outdoor"],
+  "author": "StarStitch",
+  "version": "1.0",
+  "base_config": {
+    "project_name": "nature_morph",
+    "output_folder": "renders",
+    "settings": {
+      "aspect_ratio": "9:16",
+      "transition_duration_sec": 6,
+      "image_model": "black-forest-labs/flux-1.1-pro",
+      "video_model": "fal-ai/kling-video/v1.6/pro/image-to-video"
+    },
+    "global_scene": {
+      "location_prompt": "beautiful natural landscape, golden hour, wildlife photography style, National Geographic quality, 4k",
+      "negative_prompt": "blurry, distorted, cartoon, low quality, urban, buildings"
+    },
+    "audio": {
+      "enabled": false,
+      "volume": 0.6,
+      "fade_in_sec": 2.0,
+      "fade_out_sec": 3.0,
+      "loop": true,
+      "normalize": true
+    },
+    "sequence": [
+      {
+        "id": "lion",
+        "name": "Lion",
+        "visual_prompt": "Majestic lion with flowing mane, powerful gaze, savanna background"
+      },
+      {
+        "id": "eagle",
+        "name": "Eagle",
+        "visual_prompt": "Bald eagle with intense eyes, feathers detailed, mountain backdrop"
+      },
+      {
+        "id": "wolf",
+        "name": "Wolf",
+        "visual_prompt": "Grey wolf with piercing eyes, thick fur, snowy forest"
+      }
+    ]
+  }
+}

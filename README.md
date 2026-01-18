@@ -22,6 +22,9 @@ StarStitch is a Python automation tool that generates seamless "morphing selfie"
 - **Dual-Provider Architecture** — Leverages Replicate for fast image generation and Fal.ai for high-quality video morphing
 - **Multi-Provider Support** — Choose from Fal.ai (Kling), Runway ML Gen-3, or Luma Dream Machine for video generation
 - **Audio Integration** — Add background music with volume control, fade effects, and automatic looping
+- **Batch Processing** — Process multiple config files in a directory with summary reports and resume capability
+- **Template System** — Pre-built scene templates for viral, holiday, event, and themed content
+- **Output Variants** — Generate multiple aspect ratios (9:16, 16:9, 1:1) from a single render
 - **Web UI** — Modern Streamlit interface for visual configuration (no JSON editing required)
 - **Crash Recovery** — Resume capability allows picking up where you left off if generation fails mid-sequence
 - **JSON Configuration** — Swap subjects and scenes without touching code
@@ -158,6 +161,18 @@ python main.py --config my_custom_config.json
 
 # Resume a crashed render
 python main.py --resume renders/render_20250117_143022
+
+# Use a template
+python main.py --template tiktok_celeb_morph
+
+# List available templates
+python main.py --list-templates
+
+# Generate multiple aspect ratio variants
+python main.py --variants 16:9,1:1
+
+# Process multiple configs in a batch
+python main.py --batch ./batch_configs/
 ```
 
 ---
@@ -170,9 +185,11 @@ StarStitch includes a modern, minimal web interface built with Streamlit.
 
 | Tab | Description |
 |-----|-------------|
+| **Templates** | Browse pre-built templates for viral, holiday, event, and themed content |
 | **Sequence** | Add, remove, and reorder subjects in your morph chain |
 | **Scene** | Configure location prompts and quality settings |
 | **Audio** | Upload background music, set volume, fade effects, and looping |
+| **Variants** | Generate multiple aspect ratio versions (9:16, 16:9, 1:1) |
 | **Preview** | Review your configuration and see estimates |
 | **Generate** | Pre-flight checks and pipeline execution |
 
@@ -199,12 +216,20 @@ StarStitch/
 ├── providers/
 │   ├── __init__.py
 │   ├── image_generator.py  # Replicate wrapper
-│   └── video_generator.py  # Fal.ai wrapper
+│   ├── video_generator.py  # Fal.ai wrapper
+│   └── video_provider_factory.py  # Provider factory pattern
 ├── utils/
 │   ├── __init__.py
-│   ├── ffmpeg_utils.py     # Frame extraction & concatenation
+│   ├── ffmpeg_utils.py     # Frame extraction, concatenation & variants
 │   ├── audio_utils.py      # Audio processing & merging
-│   └── file_manager.py     # Asset organization & resume logic
+│   ├── file_manager.py     # Asset organization & resume logic
+│   ├── batch_processor.py  # Batch processing manager
+│   └── template_loader.py  # Template system loader
+├── templates/              # Pre-built scene templates
+│   ├── viral/              # TikTok, Reels trends
+│   ├── holidays/           # Christmas, Halloween, etc.
+│   ├── events/             # Birthday, Wedding, Graduation
+│   └── themes/             # Travel, Nature, Fantasy
 ├── web/                    # React Web UI
 │   ├── src/
 │   │   ├── components/     # UI components
@@ -222,7 +247,9 @@ StarStitch/
         ├── 01_target.png
         ├── 01_morph.mp4
         ├── 01_lastframe.png
-        ├── ...
+        ├── variants/           # Aspect ratio variants
+        │   ├── final_starstitch_16x9.mp4
+        │   └── final_starstitch_1x1.mp4
         └── final_starstitch.mp4
 ```
 
@@ -301,7 +328,8 @@ Visit `http://localhost:5173` to see the interface.
 - [x] **v0.2** — Web UI for configuration (Streamlit + React)
 - [x] **v0.3** — Additional video providers (Runway ML, Luma AI) with factory pattern
 - [x] **v0.4** — Audio track integration (volume, fades, looping, normalization)
-- [ ] **v0.5** — Batch processing for multiple configs
+- [x] **v0.5** — Batch processing, templates, and output variants
+- [ ] **v0.6** — FastAPI backend with WebSocket progress updates
 - [ ] **v1.0** — Production-ready release with comprehensive error handling
 
 ---
