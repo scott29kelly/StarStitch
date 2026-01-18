@@ -208,11 +208,21 @@ The UI features:
 ```
 StarStitch/
 ├── main.py                 # CLI entry point and ChainManager
+├── run_api.py              # API server runner
 ├── app.py                  # Streamlit Web UI
 ├── config.py               # Configuration loader & dataclasses
 ├── requirements.txt        # Python dependencies
 ├── .env.example            # Environment variable template
 ├── config.json             # Default configuration
+├── api/                    # FastAPI backend (v0.6)
+│   ├── __init__.py
+│   ├── main.py             # FastAPI application
+│   ├── models.py           # Pydantic models
+│   ├── job_queue.py        # Background job processing
+│   ├── websocket.py        # WebSocket handler
+│   └── routes/
+│       ├── render.py       # Render endpoints
+│       └── templates.py    # Template endpoints
 ├── providers/
 │   ├── __init__.py
 │   ├── image_generator.py  # Replicate wrapper
@@ -313,6 +323,69 @@ npm run dev
 
 Visit `http://localhost:5173` to see the interface.
 
+---
+
+## 🌐 API Backend (v0.6)
+
+StarStitch includes a RESTful API backend powered by FastAPI for programmatic access and React frontend integration.
+
+### Starting the API Server
+
+```bash
+# Basic usage
+python run_api.py
+
+# With custom port
+python run_api.py --port 3000
+
+# Development mode with auto-reload
+python run_api.py --reload
+```
+
+The API server provides:
+- **REST API**: Full CRUD operations for render jobs
+- **WebSocket**: Real-time progress updates
+- **Job Queue**: Background task processing with configurable concurrency
+
+### API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/render` | Start a new render job |
+| GET | `/api/render/{id}` | Get render status and progress |
+| DELETE | `/api/render/{id}` | Cancel a running render |
+| GET | `/api/renders` | List all renders with pagination |
+| GET | `/api/templates` | List available templates |
+| GET | `/api/templates/{name}` | Get template details |
+| WS | `/ws/render/{id}` | Real-time progress updates |
+
+### API Documentation
+
+Once the server is running, visit:
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+- **OpenAPI JSON**: http://localhost:8000/openapi.json
+
+### WebSocket Protocol
+
+Connect to `/ws/render/{job_id}` to receive real-time updates:
+
+```javascript
+const ws = new WebSocket('ws://localhost:8000/ws/render/job_abc123');
+
+ws.onmessage = (event) => {
+  const message = JSON.parse(event.data);
+  // message.type: 'progress' | 'complete' | 'error' | 'cancelled'
+  // message.data: progress details or error info
+};
+
+// Send heartbeat
+ws.send(JSON.stringify({ type: 'ping' }));
+
+// Cancel job
+ws.send(JSON.stringify({ type: 'cancel' }));
+```
+
 ### Design Highlights
 
 - **Color Palette**: Deep space void with cosmic aurora gradients (indigo → purple → pink)
@@ -329,7 +402,8 @@ Visit `http://localhost:5173` to see the interface.
 - [x] **v0.3** — Additional video providers (Runway ML, Luma AI) with factory pattern
 - [x] **v0.4** — Audio track integration (volume, fades, looping, normalization)
 - [x] **v0.5** — Batch processing, templates, and output variants
-- [ ] **v0.6** — FastAPI backend with WebSocket progress updates
+- [x] **v0.6** — FastAPI backend with WebSocket progress updates
+- [ ] **v0.7** — Cloud storage & sharing
 - [ ] **v1.0** — Production-ready release with comprehensive error handling
 
 ---
