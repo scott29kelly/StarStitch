@@ -20,6 +20,7 @@ StarStitch is a Python automation tool that generates seamless "morphing selfie"
 
 - **Frame-Perfect Transitions** — Extracts the exact last frame of each video segment to ensure zero-glitch morphing
 - **Dual-Provider Architecture** — Leverages Replicate for fast image generation and Fal.ai for high-quality video morphing
+- **Web UI** — Modern Streamlit interface for visual configuration (no JSON editing required)
 - **Crash Recovery** — Resume capability allows picking up where you left off if generation fails mid-sequence
 - **JSON Configuration** — Swap subjects and scenes without touching code
 - **Modular Design** — Easily swap AI providers as APIs evolve
@@ -84,7 +85,20 @@ cp .env.example .env
 # Edit .env with your API keys
 ```
 
-### Configuration
+### Option 1: Web UI (Recommended)
+
+```bash
+# Launch the Streamlit web interface
+streamlit run app.py
+```
+
+The Web UI provides:
+- Visual sequence builder with drag-and-drop reordering
+- Scene presets for popular locations
+- Real-time cost and time estimates
+- JSON export for CLI usage
+
+### Option 2: CLI
 
 Create or edit `config.json`:
 
@@ -122,7 +136,7 @@ Create or edit `config.json`:
 }
 ```
 
-### Run
+Then run:
 
 ```bash
 python main.py
@@ -136,12 +150,36 @@ python main.py --resume renders/render_20250117_143022
 
 ---
 
+## 🖥️ Web UI
+
+StarStitch includes a modern, minimal web interface built with Streamlit.
+
+### Features
+
+| Tab | Description |
+|-----|-------------|
+| **Sequence** | Add, remove, and reorder subjects in your morph chain |
+| **Scene** | Configure location prompts and quality settings |
+| **Preview** | Review your configuration and see estimates |
+| **Generate** | Pre-flight checks and pipeline execution |
+
+### Screenshots
+
+The UI features:
+- Dark theme with violet accent colors
+- Real-time cost/time estimates
+- Pre-flight API key validation
+- JSON export for reproducibility
+
+---
+
 ## 📁 Project Structure
 
 ```
 StarStitch/
-├── main.py                 # Entry point and ChainManager
-├── config.py               # Configuration loader
+├── main.py                 # CLI entry point and ChainManager
+├── app.py                  # Streamlit Web UI
+├── config.py               # Configuration loader & dataclasses
 ├── requirements.txt        # Python dependencies
 ├── .env.example            # Environment variable template
 ├── config.json             # Default configuration
@@ -155,6 +193,8 @@ StarStitch/
 │   └── file_manager.py     # Asset organization & resume logic
 └── renders/                # Output directory (generated)
     └── render_{timestamp}/
+        ├── manifest.json       # Resume state
+        ├── config.json         # Render config
         ├── 00_anchor.png
         ├── 01_target.png
         ├── 01_morph.mp4
@@ -173,6 +213,7 @@ StarStitch/
 | **Image Gen** | Replicate (Flux 1.1 Pro) | High-quality celebrity likeness |
 | **Video Gen** | Fal.ai (Kling v1.6 Pro) | Start/end frame morphing |
 | **Video Processing** | FFMPEG | Frame extraction & concatenation |
+| **Web UI** | Streamlit | Visual configuration interface |
 | **Config** | JSON | Flexible scene definition |
 
 ---
@@ -189,8 +230,8 @@ StarStitch/
 
 ## 🗺️ Roadmap
 
-- [ ] **v0.1** — Core pipeline with Replicate + Fal.ai integration
-- [ ] **v0.2** — Web UI for configuration (Streamlit/Gradio)
+- [x] **v0.1** — Core pipeline with Replicate + Fal.ai integration
+- [x] **v0.2** — Web UI for configuration (Streamlit)
 - [ ] **v0.3** — Additional video providers (Runway, Luma)
 - [ ] **v0.4** — Audio track integration
 - [ ] **v0.5** — Batch processing for multiple configs
@@ -221,6 +262,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [Replicate](https://replicate.com/) for accessible AI model APIs
 - [Fal.ai](https://fal.ai/) for Kling video generation endpoints
 - [Black Forest Labs](https://blackforestlabs.ai/) for the Flux image model
+- [Streamlit](https://streamlit.io/) for the web UI framework
 - The AI coding community for vibe coding inspiration
 
 ---
