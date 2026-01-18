@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { Layout, Dashboard, ConfigurePanel, RenderView, Gallery } from './components';
+import { Layout, Dashboard, ConfigurePanel, RenderView, Gallery, ToastContainer } from './components';
+import { useToast } from './hooks';
 import type { View, ProjectConfig, RenderProgress } from './types';
 import './index.css';
 
@@ -66,11 +67,15 @@ function App() {
     message: '',
     elapsed_time: 0,
   });
+  
+  const toast = useToast();
 
   // Simulate render progress for demo
   const simulateRender = () => {
     const totalSteps = config.sequence.length * 2 + 1; // images + videos + final
     let step = 0;
+    
+    toast.info('Starting Generation', 'Your stitch is being prepared...');
     
     setRenderProgress({
       status: 'preparing',
@@ -159,6 +164,7 @@ function App() {
             message: 'Your stitch is ready!',
             elapsed_time: totalSteps * 3,
           });
+          toast.success('Generation Complete!', 'Your video is ready to download.');
         }, 1000);
       }
     }, 2000);
@@ -174,49 +180,61 @@ function App() {
     simulateRender();
   };
 
+  const handleDownload = () => {
+    toast.success('Download Started', 'Your video is being downloaded...');
+  };
+
+  const handleDeleteProject = (id: string) => {
+    toast.warning('Project Deleted', `Project ${id} has been removed.`);
+  };
+
   return (
-    <Layout currentView={currentView} onViewChange={setCurrentView}>
-      <AnimatePresence mode="wait">
-        {currentView === 'dashboard' && (
-          <Dashboard
-            key="dashboard"
-            onStartNew={handleStartNew}
-            recentProjects={mockRecentProjects}
-            renderProgress={renderProgress.status !== 'idle' ? renderProgress : undefined}
-          />
-        )}
+    <>
+      <Layout currentView={currentView} onViewChange={setCurrentView}>
+        <AnimatePresence mode="wait">
+          {currentView === 'dashboard' && (
+            <Dashboard
+              key="dashboard"
+              onStartNew={handleStartNew}
+              recentProjects={mockRecentProjects}
+              renderProgress={renderProgress.status !== 'idle' ? renderProgress : undefined}
+            />
+          )}
 
-        {currentView === 'configure' && (
-          <ConfigurePanel
-            key="configure"
-            config={config}
-            onConfigChange={setConfig}
-            onStartRender={handleStartRender}
-          />
-        )}
+          {currentView === 'configure' && (
+            <ConfigurePanel
+              key="configure"
+              config={config}
+              onConfigChange={setConfig}
+              onStartRender={handleStartRender}
+            />
+          )}
 
-        {currentView === 'render' && (
-          <RenderView
-            key="render"
-            progress={renderProgress}
-            subjects={config.sequence}
-            onPause={() => console.log('Pause')}
-            onRetry={simulateRender}
-            onDownload={() => console.log('Download')}
-          />
-        )}
+          {currentView === 'render' && (
+            <RenderView
+              key="render"
+              progress={renderProgress}
+              subjects={config.sequence}
+              onPause={() => toast.info('Paused', 'Generation has been paused.')}
+              onRetry={simulateRender}
+              onDownload={handleDownload}
+            />
+          )}
 
-        {currentView === 'gallery' && (
-          <Gallery
-            key="gallery"
-            projects={mockGalleryProjects}
-            onDelete={(id) => console.log('Delete', id)}
-            onDownload={(id) => console.log('Download', id)}
-            onPlay={(id) => console.log('Play', id)}
-          />
-        )}
-      </AnimatePresence>
-    </Layout>
+          {currentView === 'gallery' && (
+            <Gallery
+              key="gallery"
+              projects={mockGalleryProjects}
+              onDelete={handleDeleteProject}
+              onDownload={handleDownload}
+              onPlay={(id) => toast.info('Playing', `Opening video ${id}...`)}
+            />
+          )}
+        </AnimatePresence>
+      </Layout>
+      
+      <ToastContainer toasts={toast.toasts} onClose={toast.removeToast} />
+    </>
   );
 }
 
