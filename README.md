@@ -20,6 +20,8 @@ StarStitch is a Python automation tool that generates seamless "morphing selfie"
 
 - **Frame-Perfect Transitions** — Extracts the exact last frame of each video segment to ensure zero-glitch morphing
 - **Dual-Provider Architecture** — Leverages Replicate for fast image generation and Fal.ai for high-quality video morphing
+- **Multi-Provider Support** — Choose from Fal.ai (Kling), Runway ML Gen-3, or Luma Dream Machine for video generation
+- **Audio Integration** — Add background music with volume control, fade effects, and automatic looping
 - **Web UI** — Modern Streamlit interface for visual configuration (no JSON editing required)
 - **Crash Recovery** — Resume capability allows picking up where you left off if generation fails mid-sequence
 - **JSON Configuration** — Swap subjects and scenes without touching code
@@ -116,6 +118,15 @@ Create or edit `config.json`:
     "location_prompt": "taking a selfie at the Eiffel Tower, golden hour lighting, 4k photorealistic",
     "negative_prompt": "blurry, distorted, cartoon, low quality"
   },
+  "audio": {
+    "enabled": true,
+    "audio_path": "/path/to/background-music.mp3",
+    "volume": 0.8,
+    "fade_in_sec": 1.0,
+    "fade_out_sec": 2.0,
+    "loop": true,
+    "normalize": true
+  },
   "sequence": [
     {
       "id": "anchor",
@@ -160,6 +171,7 @@ StarStitch includes a modern, minimal web interface built with Streamlit.
 |-----|-------------|
 | **Sequence** | Add, remove, and reorder subjects in your morph chain |
 | **Scene** | Configure location prompts and quality settings |
+| **Audio** | Upload background music, set volume, fade effects, and looping |
 | **Preview** | Review your configuration and see estimates |
 | **Generate** | Pre-flight checks and pipeline execution |
 
@@ -190,6 +202,7 @@ StarStitch/
 ├── utils/
 │   ├── __init__.py
 │   ├── ffmpeg_utils.py     # Frame extraction & concatenation
+│   ├── audio_utils.py      # Audio processing & merging
 │   └── file_manager.py     # Asset organization & resume logic
 └── renders/                # Output directory (generated)
     └── render_{timestamp}/
@@ -232,8 +245,8 @@ StarStitch/
 
 - [x] **v0.1** — Core pipeline with Replicate + Fal.ai integration
 - [x] **v0.2** — Web UI for configuration (Streamlit)
-- [ ] **v0.3** — Additional video providers (Runway, Luma)
-- [ ] **v0.4** — Audio track integration
+- [x] **v0.3** — Additional video providers (Runway ML, Luma AI) with factory pattern
+- [x] **v0.4** — Audio track integration (volume, fades, looping, normalization)
 - [ ] **v0.5** — Batch processing for multiple configs
 - [ ] **v1.0** — Production-ready release with comprehensive error handling
 

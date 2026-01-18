@@ -7,6 +7,9 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
 
+# Re-export AudioSettings for external use
+__all__ = ['Subject', 'GlobalScene', 'AudioSettings', 'Settings', 'StarStitchConfig']
+
 
 @dataclass
 class Subject:
@@ -21,6 +24,43 @@ class GlobalScene:
     """Global scene settings applied to all images."""
     location_prompt: str = ""
     negative_prompt: str = "blurry, distorted, cartoon, low quality"
+
+
+@dataclass
+class AudioSettings:
+    """Audio configuration for background music."""
+    enabled: bool = False
+    audio_path: str = ""
+    volume: float = 0.8  # 0.0 to 1.0
+    fade_in_sec: float = 1.0  # Fade in duration at start
+    fade_out_sec: float = 2.0  # Fade out duration at end
+    loop: bool = True  # Loop audio if shorter than video
+    normalize: bool = True  # Normalize audio volume
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "AudioSettings":
+        """Create AudioSettings from dictionary."""
+        return cls(
+            enabled=data.get("enabled", False),
+            audio_path=data.get("audio_path", ""),
+            volume=data.get("volume", 0.8),
+            fade_in_sec=data.get("fade_in_sec", 1.0),
+            fade_out_sec=data.get("fade_out_sec", 2.0),
+            loop=data.get("loop", True),
+            normalize=data.get("normalize", True)
+        )
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary."""
+        return {
+            "enabled": self.enabled,
+            "audio_path": self.audio_path,
+            "volume": self.volume,
+            "fade_in_sec": self.fade_in_sec,
+            "fade_out_sec": self.fade_out_sec,
+            "loop": self.loop,
+            "normalize": self.normalize
+        }
 
 
 @dataclass
@@ -40,6 +80,7 @@ class StarStitchConfig:
     settings: Settings
     global_scene: GlobalScene
     sequence: List[Subject]
+    audio: Optional[AudioSettings] = None
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "StarStitchConfig":
@@ -67,12 +108,17 @@ class StarStitchConfig:
             for i, s in enumerate(data.get("sequence", []))
         ]
         
+        # Parse audio settings if present
+        audio_data = data.get("audio")
+        audio = AudioSettings.from_dict(audio_data) if audio_data else None
+        
         return cls(
             project_name=data.get("project_name", "untitled"),
             output_folder=data.get("output_folder", "renders"),
             settings=settings,
             global_scene=global_scene,
-            sequence=sequence
+            sequence=sequence,
+            audio=audio
         )
     
     @classmethod
@@ -84,7 +130,7 @@ class StarStitchConfig:
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert config to dictionary."""
-        return {
+        result = {
             "project_name": self.project_name,
             "output_folder": self.output_folder,
             "settings": {
@@ -106,6 +152,12 @@ class StarStitchConfig:
                 for s in self.sequence
             ]
         }
+        
+        # Include audio settings if configured
+        if self.audio:
+            result["audio"] = self.audio.to_dict()
+        
+        return result
     
     def to_file(self, path: str) -> None:
         """Save config to JSON file."""
@@ -142,5 +194,21 @@ class StarStitchConfig:
         
         if not 2 <= self.settings.transition_duration_sec <= 10:
             errors.append("Transition duration must be between 2 and 10 seconds")
+        
+        # Validate audio settings if enabled
+        if self.audio and self.audio.enabled:
+            if not self.audio.audio_path:
+                errors.append("Audio path is required when audio is enabled")
+            elif not Path(self.audio.audio_path).exists():
+                errors.append(f"Audio file not found: {self.audio.audio_path}")
+            
+            if not 0.0 <= self.audio.volume <= 1.0:
+                errors.append("Audio volume must be between 0.0 and 1.0")
+            
+            if self.audio.fade_in_sec < 0:
+                errors.append("Audio fade in duration cannot be negative")
+            
+            if self.audio.fade_out_sec < 0:
+                errors.append("Audio fade out duration cannot be negative")
         
         return errors

@@ -279,6 +279,15 @@ def init_session_state():
                 "visual_prompt": "A friendly tourist in casual clothes, smiling broadly"
             }
         ],
+        # Audio settings (v0.4)
+        "audio_enabled": False,
+        "audio_file_path": "",
+        "audio_volume": 0.8,
+        "audio_fade_in": 1.0,
+        "audio_fade_out": 2.0,
+        "audio_loop": True,
+        "audio_normalize": True,
+        # Pipeline state
         "pipeline_status": "idle",  # idle, running, paused, complete, error
         "current_step": 0,
         "total_steps": 0,
@@ -329,11 +338,21 @@ def apply_config(config: dict):
         st.session_state.negative_prompt = g.get("negative_prompt", "")
     if "sequence" in config:
         st.session_state.sequence = config["sequence"]
+    # Apply audio settings (v0.4)
+    if "audio" in config:
+        a = config["audio"]
+        st.session_state.audio_enabled = a.get("enabled", False)
+        st.session_state.audio_file_path = a.get("audio_path", "")
+        st.session_state.audio_volume = a.get("volume", 0.8)
+        st.session_state.audio_fade_in = a.get("fade_in_sec", 1.0)
+        st.session_state.audio_fade_out = a.get("fade_out_sec", 2.0)
+        st.session_state.audio_loop = a.get("loop", True)
+        st.session_state.audio_normalize = a.get("normalize", True)
 
 
 def export_config() -> dict:
     """Generate config dict from current session state."""
-    return {
+    config = {
         "project_name": st.session_state.project_name,
         "output_folder": st.session_state.output_folder,
         "settings": {
@@ -346,8 +365,18 @@ def export_config() -> dict:
             "location_prompt": st.session_state.location_prompt,
             "negative_prompt": st.session_state.negative_prompt
         },
+        "audio": {
+            "enabled": st.session_state.audio_enabled,
+            "audio_path": st.session_state.audio_file_path,
+            "volume": st.session_state.audio_volume,
+            "fade_in_sec": st.session_state.audio_fade_in,
+            "fade_out_sec": st.session_state.audio_fade_out,
+            "loop": st.session_state.audio_loop,
+            "normalize": st.session_state.audio_normalize
+        },
         "sequence": st.session_state.sequence
     }
+    return config
 
 
 def add_subject(name: str = "", visual_prompt: str = ""):
@@ -418,7 +447,7 @@ with st.sidebar:
     <div style="margin-bottom: 2rem;">
         <span style="font-size: 2rem;">🌟</span>
         <span style="font-size: 1.25rem; font-weight: 600; margin-left: 0.5rem;">StarStitch</span>
-        <p style="color: #71717a; font-size: 0.75rem; margin-top: 0.25rem;">v0.2 Web UI</p>
+        <p style="color: #71717a; font-size: 0.75rem; margin-top: 0.25rem;">v0.4 Audio Integration</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -528,9 +557,10 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Tabs for main sections
-tab_sequence, tab_scene, tab_preview, tab_generate = st.tabs([
+tab_sequence, tab_scene, tab_audio, tab_preview, tab_generate = st.tabs([
     "📋 Sequence",
     "🎬 Scene",
+    "🎵 Audio",
     "👁️ Preview",
     "🚀 Generate"
 ])
@@ -679,6 +709,160 @@ with tab_scene:
 
 
 # =============================================================================
+# TAB: AUDIO SETTINGS (v0.4)
+# =============================================================================
+
+with tab_audio:
+    st.markdown("### Background Audio")
+    st.markdown("Add background music or ambient sound to your final video.")
+    
+    st.markdown("---")
+    
+    # Enable/disable audio
+    col_toggle, col_spacer = st.columns([1, 2])
+    with col_toggle:
+        st.session_state.audio_enabled = st.toggle(
+            "Enable Audio Track",
+            value=st.session_state.audio_enabled,
+            help="Add background audio to the final video"
+        )
+    
+    if st.session_state.audio_enabled:
+        st.markdown("---")
+        
+        # Audio file upload
+        st.markdown("##### Audio File")
+        
+        uploaded_audio = st.file_uploader(
+            "Upload Audio",
+            type=["mp3", "wav", "m4a", "aac", "flac", "ogg"],
+            help="Supported formats: MP3, WAV, M4A, AAC, FLAC, OGG"
+        )
+        
+        if uploaded_audio:
+            # Save uploaded file to temp location
+            audio_dir = Path(st.session_state.output_folder) / "audio"
+            audio_dir.mkdir(parents=True, exist_ok=True)
+            audio_save_path = audio_dir / uploaded_audio.name
+            
+            with open(audio_save_path, "wb") as f:
+                f.write(uploaded_audio.read())
+            
+            st.session_state.audio_file_path = str(audio_save_path)
+            st.success(f"Audio file saved: {uploaded_audio.name}")
+        
+        # Show current audio file
+        if st.session_state.audio_file_path:
+            current_file = Path(st.session_state.audio_file_path)
+            if current_file.exists():
+                st.markdown(f"**Current file:** `{current_file.name}`")
+            else:
+                st.warning("Previously selected audio file not found.")
+        
+        # Or specify path manually
+        manual_path = st.text_input(
+            "Or enter audio file path",
+            value=st.session_state.audio_file_path,
+            placeholder="/path/to/your/audio.mp3",
+            help="You can also specify a path to an existing audio file"
+        )
+        if manual_path != st.session_state.audio_file_path:
+            st.session_state.audio_file_path = manual_path
+        
+        st.markdown("---")
+        
+        # Volume settings
+        st.markdown("##### Volume & Mixing")
+        
+        col_vol, col_norm = st.columns(2)
+        
+        with col_vol:
+            st.session_state.audio_volume = st.slider(
+                "Volume",
+                min_value=0.0,
+                max_value=1.0,
+                value=st.session_state.audio_volume,
+                step=0.05,
+                format="%.0f%%",
+                help="Audio volume level (0% = silent, 100% = full volume)"
+            )
+            st.caption(f"Volume: {st.session_state.audio_volume * 100:.0f}%")
+        
+        with col_norm:
+            st.session_state.audio_normalize = st.checkbox(
+                "Normalize Audio",
+                value=st.session_state.audio_normalize,
+                help="Automatically adjust audio levels for consistent volume"
+            )
+        
+        st.markdown("---")
+        
+        # Fade settings
+        st.markdown("##### Fade Effects")
+        
+        col_fade_in, col_fade_out = st.columns(2)
+        
+        with col_fade_in:
+            st.session_state.audio_fade_in = st.slider(
+                "Fade In (seconds)",
+                min_value=0.0,
+                max_value=5.0,
+                value=st.session_state.audio_fade_in,
+                step=0.5,
+                help="Gradually increase volume at the start"
+            )
+        
+        with col_fade_out:
+            st.session_state.audio_fade_out = st.slider(
+                "Fade Out (seconds)",
+                min_value=0.0,
+                max_value=5.0,
+                value=st.session_state.audio_fade_out,
+                step=0.5,
+                help="Gradually decrease volume at the end"
+            )
+        
+        st.markdown("---")
+        
+        # Duration handling
+        st.markdown("##### Duration Handling")
+        
+        st.session_state.audio_loop = st.checkbox(
+            "Loop audio if shorter than video",
+            value=st.session_state.audio_loop,
+            help="If the audio is shorter than the video, it will seamlessly loop"
+        )
+        
+        # Preview summary
+        st.markdown("---")
+        st.markdown("##### Audio Settings Summary")
+        
+        estimates = calculate_estimates()
+        video_duration = estimates["final_duration_sec"]
+        
+        summary_items = [
+            f"**File:** {Path(st.session_state.audio_file_path).name if st.session_state.audio_file_path else 'Not selected'}",
+            f"**Volume:** {st.session_state.audio_volume * 100:.0f}%",
+            f"**Fade In:** {st.session_state.audio_fade_in}s | **Fade Out:** {st.session_state.audio_fade_out}s",
+            f"**Loop:** {'Enabled' if st.session_state.audio_loop else 'Disabled'}",
+            f"**Normalize:** {'Yes' if st.session_state.audio_normalize else 'No'}",
+            f"**Video Duration:** ~{video_duration}s"
+        ]
+        
+        for item in summary_items:
+            st.markdown(item)
+    
+    else:
+        st.markdown("""
+        <div class="empty-state">
+            <div class="empty-state-icon">🔇</div>
+            <p>Audio is disabled</p>
+            <p style="font-size: 0.75rem;">Enable the toggle above to add background music</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+
+# =============================================================================
 # TAB: PREVIEW
 # =============================================================================
 
@@ -814,6 +998,17 @@ with tab_generate:
     else:
         checks.append(("✓", "Fal.ai API configured", True))
     
+    # Check audio configuration (v0.4)
+    if st.session_state.audio_enabled:
+        if not st.session_state.audio_file_path:
+            checks.append(("⚠️", "Audio enabled but no file selected", False))
+        elif not Path(st.session_state.audio_file_path).exists():
+            checks.append(("⚠️", f"Audio file not found: {st.session_state.audio_file_path}", False))
+        else:
+            checks.append(("✓", f"Audio: {Path(st.session_state.audio_file_path).name}", True))
+    else:
+        checks.append(("ℹ️", "Audio track disabled (optional)", True))
+    
     # Display checks
     for icon, message, passed in checks:
         color = "#22c55e" if passed else ("#f59e0b" if icon == "⚠️" else "#ef4444")
@@ -890,6 +1085,6 @@ with tab_generate:
 st.markdown("---")
 st.markdown("""
 <div style="text-align: center; color: #71717a; font-size: 0.75rem; padding: 1rem 0;">
-    StarStitch v0.2 — Built with Streamlit
+    StarStitch v0.4 — Audio Integration — Built with Streamlit
 </div>
 """, unsafe_allow_html=True)
