@@ -1,10 +1,9 @@
 """
-StarStitch Utilities Module
-Contains helper functions for file management, FFMPEG operations, and state tracking.
+StarStitch Utilities
+Helper modules for video processing and file management.
 """
 
-from .file_manager import FileManager
 from .ffmpeg_utils import FFmpegUtils
-from .state_manager import StateManager
+from .file_manager import FileManager
 
-__all__ = ["FileManager", "FFmpegUtils", "StateManager"]
+__all__ = ["FFmpegUtils", "FileManager"]

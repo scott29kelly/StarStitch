@@ -1,702 +1,895 @@
 """
 StarStitch Web UI
-A modern Streamlit interface for the AI video morphing pipeline.
-
-Run with: streamlit run app.py
+A modern interface for configuring AI-powered video morphing sequences.
 """
 
-import os
-import sys
-import json
-import logging
-import tempfile
-import threading
-import time
-from pathlib import Path
-from typing import Optional, Dict, Any, List
-from datetime import datetime
-from dataclasses import asdict
-
 import streamlit as st
-from dotenv import load_dotenv
+import json
+import os
+from datetime import datetime
+from pathlib import Path
+from typing import Optional
+import uuid
 
-# Load environment variables
-load_dotenv()
-
-# Import StarStitch components
-from config import ConfigLoader, StarStitchConfig, SettingsConfig, ConfigError
-from providers import (
-    ImageGenerator,
-    create_video_generator,
-    VideoProviderFactory,
-)
-from providers.base_provider import ImageGenerationError, VideoGenerationError
-from utils import FileManager, FFmpegUtils
-from utils.ffmpeg_utils import FFmpegError
-
-# Page configuration
+# Page configuration - must be first Streamlit command
 st.set_page_config(
     page_title="StarStitch",
-    page_icon="✨",
+    page_icon="🌟",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="expanded"
 )
 
-# Custom CSS for dark theme
+# =============================================================================
+# CUSTOM STYLING - Intentional Minimalism
+# =============================================================================
+
 st.markdown("""
 <style>
-    /* Main app styling */
-    .stApp {
-        background: linear-gradient(180deg, #0a0a0f 0%, #141420 100%);
+    /* Root variables */
+    :root {
+        --bg-primary: #0a0a0b;
+        --bg-secondary: #141417;
+        --bg-elevated: #1a1a1f;
+        --text-primary: #fafafa;
+        --text-secondary: #a1a1aa;
+        --text-muted: #71717a;
+        --accent: #8b5cf6;
+        --accent-hover: #a78bfa;
+        --success: #22c55e;
+        --warning: #f59e0b;
+        --error: #ef4444;
+        --border: #27272a;
+        --border-hover: #3f3f46;
     }
-    
+
+    /* Global overrides */
+    .stApp {
+        background: var(--bg-primary);
+    }
+
+    /* Hide default Streamlit elements */
+    #MainMenu, footer, header {visibility: hidden;}
+    .stDeployButton {display: none;}
+
+    /* Typography */
+    h1, h2, h3, h4 {
+        font-weight: 600 !important;
+        letter-spacing: -0.02em !important;
+    }
+
+    /* Sidebar styling */
+    section[data-testid="stSidebar"] {
+        background: var(--bg-secondary);
+        border-right: 1px solid var(--border);
+    }
+
+    section[data-testid="stSidebar"] .stMarkdown p {
+        color: var(--text-secondary);
+    }
+
     /* Card-like containers */
     .stExpander {
-        background-color: rgba(30, 30, 45, 0.6);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 12px;
+        background: var(--bg-elevated) !important;
+        border: 1px solid var(--border) !important;
+        border-radius: 12px !important;
     }
-    
-    /* Headers */
-    h1, h2, h3 {
-        color: #ffffff !important;
+
+    /* Input fields */
+    .stTextInput input, .stTextArea textarea, .stSelectbox select {
+        background: var(--bg-secondary) !important;
+        border: 1px solid var(--border) !important;
+        border-radius: 8px !important;
+        color: var(--text-primary) !important;
     }
-    
-    /* Provider cards */
-    .provider-card {
-        background: linear-gradient(135deg, rgba(40, 40, 60, 0.8), rgba(30, 30, 45, 0.8));
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 12px;
-        padding: 1.5rem;
-        margin: 0.5rem 0;
-        transition: all 0.3s ease;
+
+    .stTextInput input:focus, .stTextArea textarea:focus {
+        border-color: var(--accent) !important;
+        box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2) !important;
     }
-    
-    .provider-card:hover {
-        border-color: rgba(100, 200, 255, 0.4);
-        box-shadow: 0 4px 20px rgba(100, 200, 255, 0.1);
-    }
-    
-    .provider-card.selected {
-        border-color: #4CAF50;
-        box-shadow: 0 4px 20px rgba(76, 175, 80, 0.2);
-    }
-    
-    /* Status indicators */
-    .status-ready {
-        color: #4CAF50;
-    }
-    
-    .status-missing {
-        color: #ff6b6b;
-    }
-    
-    /* Progress styling */
-    .stProgress > div > div {
-        background: linear-gradient(90deg, #4CAF50, #8BC34A);
-    }
-    
-    /* Button styling */
+
+    /* Buttons */
     .stButton > button {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border: none;
-        border-radius: 8px;
-        padding: 0.5rem 2rem;
-        font-weight: 600;
-        transition: all 0.3s ease;
+        background: var(--accent) !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 8px !important;
+        font-weight: 500 !important;
+        padding: 0.5rem 1.5rem !important;
+        transition: all 0.2s ease !important;
     }
-    
+
     .stButton > button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        background: var(--accent-hover) !important;
+        transform: translateY(-1px);
     }
-    
-    /* Sidebar styling */
-    [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #0d0d15 0%, #1a1a2e 100%);
+
+    /* Secondary buttons */
+    .stButton > button[kind="secondary"] {
+        background: transparent !important;
+        border: 1px solid var(--border) !important;
+        color: var(--text-secondary) !important;
     }
-    
-    /* Metric cards */
-    [data-testid="metric-container"] {
-        background-color: rgba(30, 30, 45, 0.6);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+
+    /* Slider styling */
+    .stSlider > div > div {
+        background: var(--accent) !important;
+    }
+
+    /* Progress bar */
+    .stProgress > div > div {
+        background: var(--accent) !important;
+    }
+
+    /* Custom card component */
+    .subject-card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
         border-radius: 12px;
+        padding: 1.25rem;
+        margin-bottom: 1rem;
+        transition: border-color 0.2s ease;
+    }
+
+    .subject-card:hover {
+        border-color: var(--border-hover);
+    }
+
+    .subject-card.anchor {
+        border-left: 3px solid var(--accent);
+    }
+
+    /* Status badges */
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.75rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+
+    .status-pending {
+        background: rgba(113, 113, 122, 0.2);
+        color: var(--text-muted);
+    }
+
+    .status-processing {
+        background: rgba(139, 92, 246, 0.2);
+        color: var(--accent);
+    }
+
+    .status-complete {
+        background: rgba(34, 197, 94, 0.2);
+        color: var(--success);
+    }
+
+    /* Header styling */
+    .header-container {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 2rem;
+        padding-bottom: 1.5rem;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .header-logo {
+        font-size: 2.5rem;
+        line-height: 1;
+    }
+
+    .header-title {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin: 0;
+    }
+
+    .header-subtitle {
+        font-size: 0.875rem;
+        color: var(--text-muted);
+        margin: 0;
+    }
+
+    /* Metric cards */
+    .metric-card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 1rem 1.25rem;
+        text-align: center;
+    }
+
+    .metric-value {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .metric-label {
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    /* JSON preview */
+    .json-preview {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        border-radius: 8px;
         padding: 1rem;
+        font-family: 'SF Mono', 'Fira Code', monospace;
+        font-size: 0.8rem;
+        overflow-x: auto;
+    }
+
+    /* Divider */
+    .section-divider {
+        height: 1px;
+        background: var(--border);
+        margin: 2rem 0;
+    }
+
+    /* Empty state */
+    .empty-state {
+        text-align: center;
+        padding: 3rem;
+        color: var(--text-muted);
+    }
+
+    .empty-state-icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+
+    /* Animation keyframes */
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+
+    .processing {
+        animation: pulse 2s ease-in-out infinite;
     }
 </style>
 """, unsafe_allow_html=True)
 
 
+# =============================================================================
+# STATE INITIALIZATION
+# =============================================================================
+
 def init_session_state():
-    """Initialize session state variables."""
+    """Initialize session state with default values."""
     defaults = {
-        "config": None,
-        "running": False,
-        "current_step": "",
-        "progress": 0.0,
-        "logs": [],
-        "error": None,
-        "output_video": None,
-        "subjects": [
-            {"id": "anchor", "name": "Person 1", "visual_prompt": "A friendly person smiling"},
-            {"id": "target_01", "name": "Person 2", "visual_prompt": "A different person with confident expression"},
+        "project_name": "untitled_stitch",
+        "output_folder": "renders",
+        "aspect_ratio": "9:16",
+        "transition_duration": 5,
+        "image_model": "black-forest-labs/flux-1.1-pro",
+        "video_model": "fal-ai/kling-video/v1.6/pro/image-to-video",
+        "location_prompt": "taking a selfie at the Eiffel Tower, golden hour lighting, 4k photorealistic",
+        "negative_prompt": "blurry, distorted, cartoon, low quality",
+        "sequence": [
+            {
+                "id": "anchor",
+                "name": "Tourist",
+                "visual_prompt": "A friendly tourist in casual clothes, smiling broadly"
+            }
         ],
-        "video_provider": "fal",
+        "pipeline_status": "idle",  # idle, running, paused, complete, error
+        "current_step": 0,
+        "total_steps": 0,
+        "logs": []
     }
+    
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
 
+init_session_state()
 
-def get_provider_status() -> Dict[str, Dict[str, Any]]:
-    """Check which providers have API keys configured."""
-    providers = VideoProviderFactory.get_all_provider_info()
-    status = {}
+
+# =============================================================================
+# UTILITY FUNCTIONS
+# =============================================================================
+
+def generate_id() -> str:
+    """Generate a short unique ID for subjects."""
+    return f"subj_{uuid.uuid4().hex[:6]}"
+
+
+def load_config_file(uploaded_file) -> Optional[dict]:
+    """Parse uploaded JSON config file."""
+    try:
+        content = uploaded_file.read().decode("utf-8")
+        return json.loads(content)
+    except Exception as e:
+        st.error(f"Failed to parse config: {e}")
+        return None
+
+
+def apply_config(config: dict):
+    """Apply loaded config to session state."""
+    if "project_name" in config:
+        st.session_state.project_name = config["project_name"]
+    if "output_folder" in config:
+        st.session_state.output_folder = config["output_folder"]
+    if "settings" in config:
+        s = config["settings"]
+        st.session_state.aspect_ratio = s.get("aspect_ratio", "9:16")
+        st.session_state.transition_duration = s.get("transition_duration_sec", 5)
+        st.session_state.image_model = s.get("image_model", st.session_state.image_model)
+        st.session_state.video_model = s.get("video_model", st.session_state.video_model)
+    if "global_scene" in config:
+        g = config["global_scene"]
+        st.session_state.location_prompt = g.get("location_prompt", "")
+        st.session_state.negative_prompt = g.get("negative_prompt", "")
+    if "sequence" in config:
+        st.session_state.sequence = config["sequence"]
+
+
+def export_config() -> dict:
+    """Generate config dict from current session state."""
+    return {
+        "project_name": st.session_state.project_name,
+        "output_folder": st.session_state.output_folder,
+        "settings": {
+            "aspect_ratio": st.session_state.aspect_ratio,
+            "transition_duration_sec": st.session_state.transition_duration,
+            "image_model": st.session_state.image_model,
+            "video_model": st.session_state.video_model
+        },
+        "global_scene": {
+            "location_prompt": st.session_state.location_prompt,
+            "negative_prompt": st.session_state.negative_prompt
+        },
+        "sequence": st.session_state.sequence
+    }
+
+
+def add_subject(name: str = "", visual_prompt: str = ""):
+    """Add a new subject to the sequence."""
+    new_subject = {
+        "id": generate_id(),
+        "name": name or f"Subject {len(st.session_state.sequence) + 1}",
+        "visual_prompt": visual_prompt or "Describe the person's appearance"
+    }
+    st.session_state.sequence.append(new_subject)
+
+
+def remove_subject(index: int):
+    """Remove subject at given index (anchor at 0 cannot be removed)."""
+    if index > 0 and index < len(st.session_state.sequence):
+        st.session_state.sequence.pop(index)
+
+
+def move_subject(index: int, direction: int):
+    """Move subject up (-1) or down (+1) in sequence."""
+    # Anchor (index 0) cannot be moved
+    if index == 0:
+        return
+    new_index = index + direction
+    if 1 <= new_index < len(st.session_state.sequence):
+        seq = st.session_state.sequence
+        seq[index], seq[new_index] = seq[new_index], seq[index]
+
+
+def calculate_estimates() -> dict:
+    """Calculate time and cost estimates for current config."""
+    num_subjects = len(st.session_state.sequence)
+    num_morphs = max(0, num_subjects - 1)
     
-    for provider in providers:
-        provider_id = provider["id"]
-        env_key = provider.get("env_key", "")
-        has_key = bool(os.environ.get(env_key, ""))
-        
-        status[provider_id] = {
-            **provider,
-            "configured": has_key,
-            "status": "ready" if has_key else "missing",
-        }
+    # Rough estimates based on typical API times
+    image_time_sec = 15  # per image
+    video_time_sec = 120  # per morph video
     
-    return status
+    total_images = num_subjects
+    total_videos = num_morphs
+    
+    estimated_time_sec = (total_images * image_time_sec) + (total_videos * video_time_sec)
+    
+    # Cost estimates (approximate)
+    image_cost = 0.05  # per image
+    video_cost = 0.50  # per video
+    
+    estimated_cost = (total_images * image_cost) + (total_videos * video_cost)
+    
+    final_duration = num_morphs * st.session_state.transition_duration
+    
+    return {
+        "images": total_images,
+        "videos": total_videos,
+        "time_minutes": round(estimated_time_sec / 60, 1),
+        "cost_usd": round(estimated_cost, 2),
+        "final_duration_sec": final_duration
+    }
 
 
-def render_header():
-    """Render the application header."""
-    col1, col2 = st.columns([3, 1])
+# =============================================================================
+# SIDEBAR - Settings & Configuration
+# =============================================================================
+
+with st.sidebar:
+    # Logo and title
+    st.markdown("""
+    <div style="margin-bottom: 2rem;">
+        <span style="font-size: 2rem;">🌟</span>
+        <span style="font-size: 1.25rem; font-weight: 600; margin-left: 0.5rem;">StarStitch</span>
+        <p style="color: #71717a; font-size: 0.75rem; margin-top: 0.25rem;">v0.2 Web UI</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Project settings
+    st.markdown("#### Project")
+    st.session_state.project_name = st.text_input(
+        "Project Name",
+        value=st.session_state.project_name,
+        help="Used for output folder naming"
+    )
+    
+    st.session_state.output_folder = st.text_input(
+        "Output Folder",
+        value=st.session_state.output_folder
+    )
+    
+    st.markdown("---")
+    
+    # Generation settings
+    st.markdown("#### Generation Settings")
+    
+    st.session_state.aspect_ratio = st.selectbox(
+        "Aspect Ratio",
+        options=["9:16", "16:9", "1:1", "4:3", "3:4"],
+        index=["9:16", "16:9", "1:1", "4:3", "3:4"].index(st.session_state.aspect_ratio),
+        help="9:16 for TikTok/Reels, 16:9 for YouTube"
+    )
+    
+    st.session_state.transition_duration = st.slider(
+        "Transition Duration (sec)",
+        min_value=2,
+        max_value=10,
+        value=st.session_state.transition_duration,
+        help="Duration of each morph transition"
+    )
+    
+    st.markdown("---")
+    
+    # Model selection
+    st.markdown("#### AI Models")
+    
+    image_models = [
+        "black-forest-labs/flux-1.1-pro",
+        "black-forest-labs/flux-schnell",
+        "stability-ai/sdxl"
+    ]
+    st.session_state.image_model = st.selectbox(
+        "Image Model",
+        options=image_models,
+        index=image_models.index(st.session_state.image_model) if st.session_state.image_model in image_models else 0,
+        help="Model used for generating subject images"
+    )
+    
+    video_models = [
+        "fal-ai/kling-video/v1.6/pro/image-to-video",
+        "fal-ai/kling-video/v1.5/pro/image-to-video",
+        "fal-ai/luma-dream-machine"
+    ]
+    st.session_state.video_model = st.selectbox(
+        "Video Model",
+        options=video_models,
+        index=video_models.index(st.session_state.video_model) if st.session_state.video_model in video_models else 0,
+        help="Model used for morphing transitions"
+    )
+    
+    st.markdown("---")
+    
+    # Config import/export
+    st.markdown("#### Configuration")
+    
+    uploaded_config = st.file_uploader(
+        "Import config.json",
+        type=["json"],
+        help="Load a previously saved configuration"
+    )
+    
+    if uploaded_config:
+        config = load_config_file(uploaded_config)
+        if config:
+            apply_config(config)
+            st.success("Config loaded!")
+            st.rerun()
+    
+    # Export button
+    config_json = json.dumps(export_config(), indent=2)
+    st.download_button(
+        label="Export Config",
+        data=config_json,
+        file_name=f"{st.session_state.project_name}_config.json",
+        mime="application/json"
+    )
+
+
+# =============================================================================
+# MAIN CONTENT
+# =============================================================================
+
+# Header
+st.markdown("""
+<div class="header-container">
+    <span class="header-logo">🌟</span>
+    <div>
+        <h1 class="header-title">StarStitch</h1>
+        <p class="header-subtitle">AI-Powered Video Morphing Pipeline</p>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+# Tabs for main sections
+tab_sequence, tab_scene, tab_preview, tab_generate = st.tabs([
+    "📋 Sequence",
+    "🎬 Scene",
+    "👁️ Preview",
+    "🚀 Generate"
+])
+
+
+# =============================================================================
+# TAB: SEQUENCE BUILDER
+# =============================================================================
+
+with tab_sequence:
+    st.markdown("### Morph Sequence")
+    st.markdown("Define the subjects that will morph into each other. The first subject is the **anchor** — the starting point of your chain.")
+    
+    # Sequence metrics
+    estimates = calculate_estimates()
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.markdown("""
-        # ✨ StarStitch
-        ### AI-Powered Video Morphing Pipeline
-        """)
-    
+        st.metric("Subjects", len(st.session_state.sequence))
     with col2:
-        st.markdown("""
-        <div style='text-align: right; padding-top: 1rem;'>
-            <span style='color: #888;'>v0.3</span>
-        </div>
-        """, unsafe_allow_html=True)
+        st.metric("Transitions", estimates["videos"])
+    with col3:
+        st.metric("Est. Time", f"{estimates['time_minutes']}m")
+    with col4:
+        st.metric("Final Duration", f"{estimates['final_duration_sec']}s")
+    
+    st.markdown("---")
+    
+    # Subject cards
+    for i, subject in enumerate(st.session_state.sequence):
+        is_anchor = i == 0
+        
+        with st.container():
+            cols = st.columns([0.05, 0.3, 0.5, 0.15])
+            
+            # Index indicator
+            with cols[0]:
+                if is_anchor:
+                    st.markdown("🎯")
+                else:
+                    st.markdown(f"**{i}**")
+            
+            # Name field
+            with cols[1]:
+                new_name = st.text_input(
+                    "Name" if is_anchor else f"Name###{i}",
+                    value=subject["name"],
+                    key=f"name_{subject['id']}",
+                    label_visibility="collapsed" if not is_anchor else "visible",
+                    placeholder="Subject name"
+                )
+                if new_name != subject["name"]:
+                    st.session_state.sequence[i]["name"] = new_name
+            
+            # Visual prompt
+            with cols[2]:
+                new_prompt = st.text_input(
+                    "Visual Prompt" if is_anchor else f"Visual Prompt###{i}",
+                    value=subject["visual_prompt"],
+                    key=f"prompt_{subject['id']}",
+                    label_visibility="collapsed" if not is_anchor else "visible",
+                    placeholder="Describe their appearance..."
+                )
+                if new_prompt != subject["visual_prompt"]:
+                    st.session_state.sequence[i]["visual_prompt"] = new_prompt
+            
+            # Actions
+            with cols[3]:
+                if is_anchor:
+                    st.markdown("##### Actions")
+                else:
+                    action_cols = st.columns(3)
+                    with action_cols[0]:
+                        if i > 1:  # Can't move up if already at position 1
+                            if st.button("↑", key=f"up_{subject['id']}", help="Move up"):
+                                move_subject(i, -1)
+                                st.rerun()
+                    with action_cols[1]:
+                        if i < len(st.session_state.sequence) - 1:
+                            if st.button("↓", key=f"down_{subject['id']}", help="Move down"):
+                                move_subject(i, 1)
+                                st.rerun()
+                    with action_cols[2]:
+                        if st.button("✕", key=f"del_{subject['id']}", help="Remove"):
+                            remove_subject(i)
+                            st.rerun()
+        
+        if i < len(st.session_state.sequence) - 1:
+            st.markdown('<div style="text-align: center; color: #71717a; margin: 0.5rem 0;">↓ morphs into ↓</div>', unsafe_allow_html=True)
+    
+    # Add subject button
+    st.markdown("---")
+    col_add, col_spacer = st.columns([1, 3])
+    with col_add:
+        if st.button("+ Add Subject", use_container_width=True):
+            add_subject()
+            st.rerun()
 
 
-def render_provider_selector():
-    """Render the video provider selection UI."""
-    st.markdown("### 🎬 Video Provider")
+# =============================================================================
+# TAB: SCENE CONFIGURATION
+# =============================================================================
+
+with tab_scene:
+    st.markdown("### Global Scene")
+    st.markdown("These settings apply to all generated images, ensuring visual consistency across the morph chain.")
     
-    provider_status = get_provider_status()
+    st.markdown("---")
     
-    # Create columns for provider cards
-    cols = st.columns(3)
+    st.markdown("##### Location & Setting")
+    st.session_state.location_prompt = st.text_area(
+        "Location Prompt",
+        value=st.session_state.location_prompt,
+        height=100,
+        help="Describe the scene, lighting, and camera angle. This prompt is combined with each subject's visual prompt.",
+        placeholder="e.g., taking a selfie at the Eiffel Tower, golden hour lighting, 4k photorealistic"
+    )
     
-    provider_options = [
-        ("fal", "Fal.ai (Kling)", "High-quality morphing via Kling v1.6 Pro", "🎯"),
-        ("runway", "Runway ML", "Gen-3 Alpha Turbo for cinematic video", "🎬"),
-        ("luma", "Luma AI", "Dream Machine for smooth transitions", "🌙"),
-    ]
+    st.markdown("##### Quality Control")
+    st.session_state.negative_prompt = st.text_area(
+        "Negative Prompt",
+        value=st.session_state.negative_prompt,
+        height=80,
+        help="Describe what to avoid in generated images.",
+        placeholder="e.g., blurry, distorted, cartoon, low quality"
+    )
     
-    for i, (provider_id, name, desc, icon) in enumerate(provider_options):
-        with cols[i]:
-            status = provider_status.get(provider_id, {})
-            is_configured = status.get("configured", False)
-            is_selected = st.session_state.video_provider == provider_id
-            
-            # Status indicator
-            status_icon = "✅" if is_configured else "⚠️"
-            status_text = "Ready" if is_configured else "API Key Missing"
-            status_class = "status-ready" if is_configured else "status-missing"
-            
-            # Card styling
-            border_color = "#4CAF50" if is_selected else "rgba(255,255,255,0.1)"
-            bg_opacity = "0.9" if is_selected else "0.6"
-            
-            st.markdown(f"""
-            <div style='
-                background: linear-gradient(135deg, rgba(40, 40, 60, {bg_opacity}), rgba(30, 30, 45, {bg_opacity}));
-                border: 2px solid {border_color};
-                border-radius: 12px;
-                padding: 1rem;
-                text-align: center;
-                min-height: 160px;
-            '>
-                <div style='font-size: 2rem;'>{icon}</div>
-                <div style='font-weight: 600; margin: 0.5rem 0;'>{name}</div>
-                <div style='font-size: 0.8rem; color: #888; margin-bottom: 0.5rem;'>{desc}</div>
-                <div class='{status_class}' style='font-size: 0.8rem;'>{status_icon} {status_text}</div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            if st.button(
-                "Select" if not is_selected else "Selected ✓",
-                key=f"select_{provider_id}",
-                disabled=is_selected,
-                use_container_width=True,
-            ):
-                st.session_state.video_provider = provider_id
+    st.markdown("---")
+    
+    # Scene presets
+    st.markdown("##### Quick Presets")
+    preset_cols = st.columns(4)
+    
+    presets = {
+        "Eiffel Tower": "taking a selfie at the Eiffel Tower, golden hour lighting, 4k photorealistic",
+        "Times Square": "taking a selfie in Times Square New York, neon lights, nighttime, cinematic",
+        "Beach Sunset": "taking a selfie on a tropical beach at sunset, warm colors, paradise vibes",
+        "Studio": "professional headshot in a photo studio, neutral background, soft lighting"
+    }
+    
+    for i, (name, prompt) in enumerate(presets.items()):
+        with preset_cols[i]:
+            if st.button(name, key=f"preset_{i}", use_container_width=True):
+                st.session_state.location_prompt = prompt
                 st.rerun()
 
 
-def render_settings_panel():
-    """Render the settings configuration panel."""
-    with st.expander("⚙️ Pipeline Settings", expanded=True):
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            aspect_ratio = st.selectbox(
-                "Aspect Ratio",
-                options=["9:16", "16:9", "1:1"],
-                index=0,
-                help="Output video aspect ratio",
-            )
-        
-        with col2:
-            duration = st.selectbox(
-                "Transition Duration",
-                options=["5", "10"],
-                index=0,
-                help="Duration of each morph transition in seconds",
-            )
-        
-        with col3:
-            st.text_input(
-                "Project Name",
-                value="my_stitch",
-                key="project_name",
-                help="Name for this render project",
-            )
-    
-    return {
-        "aspect_ratio": aspect_ratio,
-        "transition_duration": duration,
-        "project_name": st.session_state.get("project_name", "my_stitch"),
-    }
+# =============================================================================
+# TAB: PREVIEW
+# =============================================================================
 
-
-def render_scene_settings():
-    """Render the global scene configuration."""
-    with st.expander("🌍 Scene Settings", expanded=True):
-        location_prompt = st.text_area(
-            "Location/Scene Prompt",
-            value="taking a selfie in Times Square at night, neon lights, 4k photorealistic",
-            height=80,
-            help="This will be appended to all subject prompts",
-        )
-        
-        negative_prompt = st.text_input(
-            "Negative Prompt",
-            value="blurry, distorted, cartoon, low quality, extra limbs",
-            help="Things to avoid in generated images",
-        )
-    
-    return {
-        "location_prompt": location_prompt,
-        "negative_prompt": negative_prompt,
-    }
-
-
-def render_sequence_editor():
-    """Render the subject sequence editor."""
-    st.markdown("### 👥 Sequence")
-    
-    # Add subject button
-    if st.button("➕ Add Subject", use_container_width=False):
-        new_id = f"target_{len(st.session_state.subjects):02d}"
-        st.session_state.subjects.append({
-            "id": new_id,
-            "name": f"Person {len(st.session_state.subjects) + 1}",
-            "visual_prompt": "A person with unique appearance",
-        })
-        st.rerun()
+with tab_preview:
+    st.markdown("### Configuration Preview")
+    st.markdown("Review your complete configuration before generating.")
     
     st.markdown("---")
     
-    # Render each subject
-    subjects_to_remove = []
+    # Visual sequence preview
+    st.markdown("##### Morph Sequence")
     
-    for i, subject in enumerate(st.session_state.subjects):
-        col1, col2, col3 = st.columns([1, 3, 0.5])
+    if len(st.session_state.sequence) > 0:
+        # Create visual flow
+        seq_cols = st.columns(min(len(st.session_state.sequence), 5))
+        for i, (col, subject) in enumerate(zip(seq_cols, st.session_state.sequence[:5])):
+            with col:
+                st.markdown(f"""
+                <div style="
+                    background: #1a1a1f;
+                    border: 1px solid {'#8b5cf6' if i == 0 else '#27272a'};
+                    border-radius: 8px;
+                    padding: 1rem;
+                    text-align: center;
+                ">
+                    <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">
+                        {'🎯' if i == 0 else '👤'}
+                    </div>
+                    <div style="font-weight: 500; color: #fafafa; font-size: 0.875rem;">
+                        {subject['name']}
+                    </div>
+                    <div style="color: #71717a; font-size: 0.7rem; margin-top: 0.25rem;">
+                        {'Anchor' if i == 0 else f'#{i}'}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            if i < len(st.session_state.sequence) - 1 and i < 4:
+                pass  # Arrow would go here in between
         
-        with col1:
-            label = "🎯 Anchor" if i == 0 else f"Target {i}"
-            st.markdown(f"**{label}**")
-            subject["name"] = st.text_input(
-                "Name",
-                value=subject["name"],
-                key=f"name_{i}",
-                label_visibility="collapsed",
-            )
-        
-        with col2:
-            subject["visual_prompt"] = st.text_area(
-                "Visual Prompt",
-                value=subject["visual_prompt"],
-                key=f"prompt_{i}",
-                height=68,
-                label_visibility="collapsed",
-            )
-        
-        with col3:
-            if i > 0:  # Can't remove anchor
-                if st.button("🗑️", key=f"remove_{i}", help="Remove this subject"):
-                    subjects_to_remove.append(i)
+        if len(st.session_state.sequence) > 5:
+            st.markdown(f"*... and {len(st.session_state.sequence) - 5} more subjects*")
     
-    # Remove subjects marked for deletion
-    for i in reversed(subjects_to_remove):
-        st.session_state.subjects.pop(i)
-        st.rerun()
-
-
-def build_config_dict(settings: Dict, scene: Dict) -> Dict[str, Any]:
-    """Build a configuration dictionary from UI state."""
-    return {
-        "project_name": settings["project_name"],
-        "output_folder": "renders",
-        "settings": {
-            "aspect_ratio": settings["aspect_ratio"],
-            "transition_duration": settings["transition_duration"],
-            "video_provider": st.session_state.video_provider,
-            "image_model": "black-forest-labs/flux-1.1-pro",
-            "video_model": get_default_model_for_provider(st.session_state.video_provider),
-        },
-        "global_scene": {
-            "location_prompt": scene["location_prompt"],
-            "negative_prompt": scene["negative_prompt"],
-        },
-        "sequence": st.session_state.subjects,
-    }
-
-
-def get_default_model_for_provider(provider_id: str) -> str:
-    """Get the default model for a provider."""
-    models = {
-        "fal": "fal-ai/kling-video/v1.6/pro/image-to-video",
-        "runway": "gen3a_turbo",
-        "luma": "luma-dream-machine",
-    }
-    return models.get(provider_id, "")
-
-
-def validate_configuration(config_dict: Dict) -> Optional[str]:
-    """Validate configuration and return error message if invalid."""
-    try:
-        config = StarStitchConfig.from_dict(config_dict)
-        config.validate()
-        
-        # Check if the selected provider has an API key
-        provider_id = config_dict["settings"]["video_provider"]
-        provider_info = VideoProviderFactory.get_provider_info(provider_id)
-        env_key = provider_info.get("env_key", "")
-        
-        if not os.environ.get(env_key):
-            return f"Missing API key for {provider_info['name']}. Set {env_key} in your .env file."
-        
-        # Check Replicate API key for image generation
-        if not os.environ.get("REPLICATE_API_TOKEN"):
-            return "Missing REPLICATE_API_TOKEN for image generation. Set it in your .env file."
-        
-        return None
-        
-    except ConfigError as e:
-        return str(e)
-    except Exception as e:
-        return f"Configuration error: {str(e)}"
-
-
-def render_run_controls(settings: Dict, scene: Dict):
-    """Render the run controls and status."""
     st.markdown("---")
     
-    config_dict = build_config_dict(settings, scene)
+    # Summary stats
+    st.markdown("##### Estimates")
     
-    # Validate button
-    col1, col2, col3 = st.columns([1, 1, 2])
-    
-    with col1:
-        if st.button("✅ Validate Config", use_container_width=True):
-            error = validate_configuration(config_dict)
-            if error:
-                st.error(f"❌ {error}")
-            else:
-                st.success("✅ Configuration is valid!")
-    
-    with col2:
-        if st.button("💾 Export Config", use_container_width=True):
-            # Create downloadable JSON
-            config_json = json.dumps(config_dict, indent=2)
-            st.download_button(
-                label="📥 Download JSON",
-                data=config_json,
-                file_name=f"{settings['project_name']}_config.json",
-                mime="application/json",
-            )
-    
-    with col3:
-        # Main run button
-        is_running = st.session_state.get("running", False)
-        
-        if is_running:
-            st.button("⏳ Running...", disabled=True, use_container_width=True)
-            
-            # Show progress
-            progress = st.session_state.get("progress", 0.0)
-            st.progress(progress)
-            st.caption(st.session_state.get("current_step", "Initializing..."))
-        else:
-            if st.button("🚀 Start Pipeline", type="primary", use_container_width=True):
-                error = validate_configuration(config_dict)
-                if error:
-                    st.error(f"❌ {error}")
-                else:
-                    run_pipeline(config_dict)
-
-
-def run_pipeline(config_dict: Dict):
-    """Run the StarStitch pipeline with the given configuration."""
-    st.session_state.running = True
-    st.session_state.error = None
-    st.session_state.output_video = None
-    st.session_state.logs = []
-    
-    try:
-        # Create configuration
-        config = StarStitchConfig.from_dict(config_dict)
-        
-        # Set up logging to capture in UI
-        logger = logging.getLogger("StarStitch-UI")
-        logger.setLevel(logging.INFO)
-        
-        # Create file manager
-        file_manager = FileManager(
-            base_output_folder=config.output_folder,
-            project_name=config.project_name,
-            logger=logger,
-        )
-        file_manager.create_render_folder()
-        
-        # Initialize providers
-        st.session_state.current_step = "Initializing providers..."
-        st.session_state.progress = 0.05
-        
-        image_generator = ImageGenerator(
-            model=config.settings.image_model,
-            logger=logger,
-        )
-        
-        video_generator = create_video_generator(
-            provider=config.settings.video_provider,
-            model=config.settings.video_model,
-            logger=logger,
-        )
-        
-        st.session_state.logs.append(f"Using video provider: {video_generator.provider_name}")
-        
-        # Initialize FFmpeg
-        ffmpeg = FFmpegUtils(logger=logger)
-        if not ffmpeg.check_availability():
-            raise RuntimeError("FFmpeg is not available. Please install FFmpeg.")
-        
-        # Process sequence
-        total_steps = len(config.sequence) * 3 + 1  # images + videos + frames + concat
-        current_step = 0
-        
-        # Generate anchor image
-        st.session_state.current_step = f"Generating anchor image: {config.anchor.name}"
-        anchor_path = file_manager.get_anchor_image_path(config.anchor.name)
-        
-        prompt = config.get_combined_prompt(config.anchor.visual_prompt)
-        image_generator.generate(
-            prompt=prompt,
-            output_path=anchor_path,
-            aspect_ratio=config.settings.aspect_ratio,
-        )
-        
-        current_step += 1
-        st.session_state.progress = current_step / total_steps
-        st.session_state.logs.append(f"✓ Generated anchor: {config.anchor.name}")
-        
-        # Track current start frame
-        current_start = anchor_path
-        
-        # Process each target
-        for i, target in enumerate(config.targets, start=1):
-            # Generate target image
-            st.session_state.current_step = f"Generating target image: {target.name}"
-            target_path = file_manager.get_target_image_path(i, target.name)
-            
-            prompt = config.get_combined_prompt(target.visual_prompt)
-            image_generator.generate(
-                prompt=prompt,
-                output_path=target_path,
-                aspect_ratio=config.settings.aspect_ratio,
-            )
-            
-            current_step += 1
-            st.session_state.progress = current_step / total_steps
-            st.session_state.logs.append(f"✓ Generated target: {target.name}")
-            
-            # Generate morph video
-            st.session_state.current_step = f"Generating morph video to {target.name}..."
-            morph_path = file_manager.get_morph_video_path(i, target.name)
-            
-            video_generator.generate(
-                start_image_path=current_start,
-                end_image_path=target_path,
-                output_path=morph_path,
-                prompt="smooth morphing transition between two people",
-                duration=config.settings.transition_duration,
-                aspect_ratio=config.settings.aspect_ratio,
-            )
-            
-            current_step += 1
-            st.session_state.progress = current_step / total_steps
-            st.session_state.logs.append(f"✓ Generated morph video: {morph_path.name}")
-            
-            # Extract last frame
-            st.session_state.current_step = f"Extracting frame from {target.name} video..."
-            lastframe_path = file_manager.get_lastframe_path(i, target.name)
-            ffmpeg.extract_last_frame(morph_path, lastframe_path)
-            
-            current_step += 1
-            st.session_state.progress = current_step / total_steps
-            
-            # Update start frame for next iteration
-            current_start = lastframe_path
-        
-        # Concatenate final video
-        st.session_state.current_step = "Concatenating final video..."
-        
-        video_paths = file_manager.list_morph_videos()
-        final_path = file_manager.get_final_output_path()
-        
-        ffmpeg.concatenate_videos(
-            video_paths=video_paths,
-            output_path=final_path,
-            filelist_path=file_manager.get_filelist_path(),
-        )
-        
-        st.session_state.progress = 1.0
-        st.session_state.current_step = "Complete!"
-        st.session_state.output_video = str(final_path)
-        st.session_state.logs.append(f"🎉 Final video saved: {final_path}")
-        
-    except Exception as e:
-        st.session_state.error = str(e)
-        st.session_state.logs.append(f"❌ Error: {str(e)}")
-    
-    finally:
-        st.session_state.running = False
-
-
-def render_output_section():
-    """Render the output/results section."""
-    if st.session_state.get("output_video"):
-        st.markdown("### 🎬 Output")
-        
-        video_path = st.session_state.output_video
-        if Path(video_path).exists():
-            st.video(video_path)
-            
-            # Download button
-            with open(video_path, "rb") as f:
-                st.download_button(
-                    label="📥 Download Video",
-                    data=f,
-                    file_name=Path(video_path).name,
-                    mime="video/mp4",
-                )
-    
-    if st.session_state.get("error"):
-        st.error(f"❌ Pipeline Error: {st.session_state.error}")
-    
-    if st.session_state.get("logs"):
-        with st.expander("📋 Logs", expanded=False):
-            for log in st.session_state.logs:
-                st.text(log)
-
-
-def render_sidebar():
-    """Render the sidebar with info and quick actions."""
-    with st.sidebar:
-        st.markdown("## 📖 Quick Guide")
-        
-        st.markdown("""
-        **1. Select Provider**
-        Choose your video generation backend
-        
-        **2. Configure Scene**
-        Set the location and style for all images
-        
-        **3. Add Subjects**
-        Define the people/characters to morph between
-        
-        **4. Run Pipeline**
-        Generate images, morph videos, and final output
-        """)
-        
-        st.markdown("---")
-        
-        st.markdown("## 🔑 API Keys")
-        
-        # Check API key status
-        keys = [
-            ("REPLICATE_API_TOKEN", "Replicate (Images)"),
-            ("FAL_KEY", "Fal.ai (Kling)"),
-            ("RUNWAY_API_KEY", "Runway ML"),
-            ("LUMA_API_KEY", "Luma AI"),
-        ]
-        
-        for env_var, name in keys:
-            has_key = bool(os.environ.get(env_var))
-            icon = "✅" if has_key else "⚠️"
-            st.markdown(f"{icon} {name}")
-        
-        st.markdown("""
-        <div style='font-size: 0.8rem; color: #888; margin-top: 1rem;'>
-        Configure API keys in your <code>.env</code> file
+    est_cols = st.columns(4)
+    with est_cols[0]:
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-value">{estimates['images']}</div>
+            <div class="metric-label">Images</div>
         </div>
         """, unsafe_allow_html=True)
-        
-        st.markdown("---")
-        
-        st.markdown("## 🔗 Resources")
-        st.markdown("""
-        - [Fal.ai Console](https://fal.ai)
-        - [Runway ML](https://runwayml.com)
-        - [Luma AI](https://lumalabs.ai)
-        - [Replicate](https://replicate.com)
-        """)
-
-
-def main():
-    """Main application entry point."""
-    init_session_state()
-    
-    render_header()
-    render_sidebar()
-    
-    # Main content
-    render_provider_selector()
+    with est_cols[1]:
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-value">{estimates['videos']}</div>
+            <div class="metric-label">Videos</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with est_cols[2]:
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-value">~{estimates['time_minutes']}m</div>
+            <div class="metric-label">Gen Time</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with est_cols[3]:
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-value">${estimates['cost_usd']}</div>
+            <div class="metric-label">Est. Cost</div>
+        </div>
+        """, unsafe_allow_html=True)
     
     st.markdown("---")
     
-    col1, col2 = st.columns([1, 1])
+    # JSON preview
+    st.markdown("##### JSON Configuration")
     
-    with col1:
-        settings = render_settings_panel()
-        scene = render_scene_settings()
-    
-    with col2:
-        render_sequence_editor()
-    
-    render_run_controls(settings, scene)
-    render_output_section()
+    with st.expander("View raw config.json", expanded=False):
+        st.code(json.dumps(export_config(), indent=2), language="json")
 
 
-if __name__ == "__main__":
-    main()
+# =============================================================================
+# TAB: GENERATE
+# =============================================================================
+
+with tab_generate:
+    st.markdown("### Generate Video")
+    st.markdown("Start the StarStitch pipeline to generate your morphing video chain.")
+    
+    st.markdown("---")
+    
+    # Pre-flight checks
+    st.markdown("##### Pre-flight Checks")
+    
+    checks = []
+    
+    # Check sequence length
+    if len(st.session_state.sequence) < 2:
+        checks.append(("❌", "Add at least 2 subjects to create a morph", False))
+    else:
+        checks.append(("✓", f"{len(st.session_state.sequence)} subjects configured", True))
+    
+    # Check location prompt
+    if not st.session_state.location_prompt.strip():
+        checks.append(("❌", "Location prompt is empty", False))
+    else:
+        checks.append(("✓", "Location prompt set", True))
+    
+    # Check for empty visual prompts
+    empty_prompts = [s for s in st.session_state.sequence if not s["visual_prompt"].strip()]
+    if empty_prompts:
+        checks.append(("⚠️", f"{len(empty_prompts)} subjects missing visual prompts", False))
+    else:
+        checks.append(("✓", "All visual prompts defined", True))
+    
+    # Check API keys (environment)
+    replicate_key = os.environ.get("REPLICATE_API_TOKEN", "")
+    fal_key = os.environ.get("FAL_KEY", "")
+    
+    if not replicate_key:
+        checks.append(("⚠️", "REPLICATE_API_TOKEN not set in environment", False))
+    else:
+        checks.append(("✓", "Replicate API configured", True))
+    
+    if not fal_key:
+        checks.append(("⚠️", "FAL_KEY not set in environment", False))
+    else:
+        checks.append(("✓", "Fal.ai API configured", True))
+    
+    # Display checks
+    for icon, message, passed in checks:
+        color = "#22c55e" if passed else ("#f59e0b" if icon == "⚠️" else "#ef4444")
+        st.markdown(f'<span style="color: {color}; margin-right: 0.5rem;">{icon}</span> {message}', unsafe_allow_html=True)
+    
+    all_passed = all(c[2] for c in checks if c[0] != "⚠️")
+    
+    st.markdown("---")
+    
+    # Generation controls
+    col_gen, col_status = st.columns([1, 2])
+    
+    with col_gen:
+        generate_disabled = not all_passed
+        
+        if st.button(
+            "🚀 Start Generation",
+            disabled=generate_disabled,
+            use_container_width=True,
+            type="primary"
+        ):
+            st.session_state.pipeline_status = "running"
+            st.session_state.total_steps = len(st.session_state.sequence) + estimates["videos"]
+            st.session_state.current_step = 0
+            
+            # Save config to file for CLI usage
+            config_path = Path(st.session_state.output_folder) / f"{st.session_state.project_name}_config.json"
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            with open(config_path, "w") as f:
+                json.dump(export_config(), f, indent=2)
+            
+            st.success(f"Config saved to `{config_path}`")
+            st.info("Run `python main.py --config {config_path}` to start generation.")
+        
+        if generate_disabled:
+            st.caption("Fix the issues above to enable generation")
+    
+    with col_status:
+        if st.session_state.pipeline_status == "running":
+            progress = st.session_state.current_step / max(st.session_state.total_steps, 1)
+            st.progress(progress, text=f"Step {st.session_state.current_step}/{st.session_state.total_steps}")
+        elif st.session_state.pipeline_status == "complete":
+            st.success("Generation complete!")
+        elif st.session_state.pipeline_status == "error":
+            st.error("Generation failed. Check logs for details.")
+    
+    # Pipeline status placeholder
+    st.markdown("---")
+    st.markdown("##### Pipeline Status")
+    
+    if st.session_state.pipeline_status == "idle":
+        st.markdown("""
+        <div class="empty-state">
+            <div class="empty-state-icon">🎬</div>
+            <p>Ready to generate</p>
+            <p style="font-size: 0.75rem;">Configure your sequence and click Start Generation</p>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        # Show logs
+        with st.expander("View Logs", expanded=True):
+            if st.session_state.logs:
+                for log in st.session_state.logs[-20:]:  # Last 20 logs
+                    st.text(log)
+            else:
+                st.text("No logs yet...")
+
+
+# =============================================================================
+# FOOTER
+# =============================================================================
+
+st.markdown("---")
+st.markdown("""
+<div style="text-align: center; color: #71717a; font-size: 0.75rem; padding: 1rem 0;">
+    StarStitch v0.2 — Built with Streamlit
+</div>
+""", unsafe_allow_html=True)
