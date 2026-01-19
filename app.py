@@ -508,7 +508,7 @@ with st.sidebar:
     <div style="margin-bottom: 2rem;">
         <span style="font-size: 2rem;">🌟</span>
         <span style="font-size: 1.25rem; font-weight: 600; margin-left: 0.5rem;">StarStitch</span>
-        <p style="color: #71717a; font-size: 0.75rem; margin-top: 0.25rem;">v0.5 Batch Processing & Templates</p>
+        <p style="color: #71717a; font-size: 0.75rem; margin-top: 0.25rem;">v0.6 FastAPI Backend & WebSocket</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -1423,6 +1423,6 @@ with tab_generate:
 st.markdown("---")
 st.markdown("""
 <div style="text-align: center; color: #71717a; font-size: 0.75rem; padding: 1rem 0;">
-    StarStitch v0.5 — Batch Processing & Templates — Built with Streamlit
+    StarStitch v0.6 — FastAPI Backend & WebSocket — Built with Streamlit
 </div>
 """, unsafe_allow_html=True)

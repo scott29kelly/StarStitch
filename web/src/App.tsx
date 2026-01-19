@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { Layout, Dashboard, ConfigurePanel, RenderView, Gallery, ToastContainer } from './components';
-import { useToast } from './hooks';
-import type { View, ProjectConfig, RenderProgress } from './types';
+import { useToast, useRender } from './hooks';
+import type { View, ProjectConfig, Subject } from './types';
 import './index.css';
 
 // Default configuration
@@ -59,125 +59,77 @@ const mockGalleryProjects = [
 function App() {
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [config, setConfig] = useState<ProjectConfig>(defaultConfig);
-  const [renderProgress, setRenderProgress] = useState<RenderProgress>({
-    status: 'idle',
-    current_step: 0,
-    total_steps: 0,
-    progress_percent: 0,
-    message: '',
-    elapsed_time: 0,
-  });
-  
+
   const toast = useToast();
 
-  // Simulate render progress for demo
-  const simulateRender = () => {
-    const totalSteps = config.sequence.length * 2 + 1; // images + videos + final
-    let step = 0;
-    
-    toast.info('Starting Generation', 'Your stitch is being prepared...');
-    
-    setRenderProgress({
-      status: 'preparing',
-      current_step: 0,
-      total_steps: totalSteps,
-      progress_percent: 0,
-      message: 'Preparing workspace...',
-      elapsed_time: 0,
-    });
+  // Use the real render hook for API integration
+  const render = useRender();
 
-    // Update subjects to pending
+  // Update subject statuses based on render progress
+  useEffect(() => {
+    if (render.progress.status === 'rendering' && render.progress.current_subject) {
+      const subjectName = render.progress.current_subject;
+      setConfig((prev) => ({
+        ...prev,
+        sequence: prev.sequence.map((s) => {
+          if (s.name === subjectName) {
+            return { ...s, status: 'generating' as const };
+          }
+          // Mark previous subjects as completed
+          const currentIndex = prev.sequence.findIndex((seq) => seq.name === subjectName);
+          const thisIndex = prev.sequence.findIndex((seq) => seq.name === s.name);
+          if (thisIndex < currentIndex) {
+            return { ...s, status: 'completed' as const };
+          }
+          return s;
+        }),
+      }));
+    } else if (render.progress.status === 'complete') {
+      setConfig((prev) => ({
+        ...prev,
+        sequence: prev.sequence.map((s) => ({ ...s, status: 'completed' as const })),
+      }));
+    }
+  }, [render.progress.current_subject, render.progress.status]);
+
+  // Show toast notifications based on render state
+  useEffect(() => {
+    if (render.state === 'rendering' && render.progress.current_step === 1) {
+      toast.info('Starting Generation', 'Your stitch is being prepared...');
+    } else if (render.state === 'complete') {
+      toast.success('Generation Complete!', 'Your video is ready to download.');
+    } else if (render.state === 'error' && render.error) {
+      toast.error('Generation Failed', render.error);
+    } else if (render.state === 'cancelled') {
+      toast.warning('Generation Cancelled', 'The render was cancelled.');
+    }
+  }, [render.state, render.progress.current_step, render.error, toast]);
+
+  const handleStartNew = () => {
+    setConfig(defaultConfig);
+    render.reset();
+    setCurrentView('configure');
+  };
+
+  const handleStartRender = async () => {
+    setCurrentView('render');
+    // Reset subjects to pending
     setConfig((prev) => ({
       ...prev,
       sequence: prev.sequence.map((s) => ({ ...s, status: 'pending' as const })),
     }));
-
-    const progressInterval = setInterval(() => {
-      step++;
-      const progress = Math.min(Math.round((step / totalSteps) * 100), 100);
-      const subjectIndex = Math.floor((step - 1) / 2);
-      const currentSubject = config.sequence[subjectIndex];
-      
-      if (step <= config.sequence.length) {
-        // Generating images
-        setRenderProgress({
-          status: 'rendering',
-          current_step: step,
-          total_steps: totalSteps,
-          progress_percent: progress,
-          message: `Generating image for ${currentSubject?.name || 'subject'}...`,
-          current_subject: currentSubject?.name,
-          elapsed_time: step * 3,
-        });
-
-        // Update subject status
-        if (currentSubject) {
-          setConfig((prev) => ({
-            ...prev,
-            sequence: prev.sequence.map((s, i) => 
-              i === subjectIndex 
-                ? { ...s, status: 'generating' as const } 
-                : i < subjectIndex 
-                  ? { ...s, status: 'completed' as const }
-                  : s
-            ),
-          }));
-        }
-      } else if (step <= config.sequence.length * 2) {
-        // Generating morphs
-        const morphIndex = step - config.sequence.length - 1;
-        setRenderProgress({
-          status: 'rendering',
-          current_step: step,
-          total_steps: totalSteps,
-          progress_percent: progress,
-          message: `Creating morph transition ${morphIndex + 1}...`,
-          current_subject: `Morph ${morphIndex + 1}`,
-          elapsed_time: step * 3,
-        });
-
-        // Mark all subjects as completed
-        setConfig((prev) => ({
-          ...prev,
-          sequence: prev.sequence.map((s) => ({ ...s, status: 'completed' as const })),
-        }));
-      } else {
-        // Finalizing
-        setRenderProgress({
-          status: 'rendering',
-          current_step: step,
-          total_steps: totalSteps,
-          progress_percent: progress,
-          message: 'Concatenating final video...',
-          elapsed_time: step * 3,
-        });
-      }
-
-      if (step >= totalSteps) {
-        clearInterval(progressInterval);
-        setTimeout(() => {
-          setRenderProgress({
-            status: 'complete',
-            current_step: totalSteps,
-            total_steps: totalSteps,
-            progress_percent: 100,
-            message: 'Your stitch is ready!',
-            elapsed_time: totalSteps * 3,
-          });
-          toast.success('Generation Complete!', 'Your video is ready to download.');
-        }, 1000);
-      }
-    }, 2000);
+    // Start the real render via API
+    await render.startRender(config);
   };
 
-  const handleStartNew = () => {
-    setConfig(defaultConfig);
-    setCurrentView('configure');
+  const handlePauseRender = async () => {
+    await render.cancelRender();
+    toast.info('Paused', 'Generation has been paused.');
   };
 
-  const handleStartRender = () => {
-    setCurrentView('render');
-    simulateRender();
+  const handleRetryRender = async () => {
+    render.reset();
+    await render.startRender(config);
   };
 
   const handleDownload = () => {
@@ -197,7 +149,7 @@ function App() {
               key="dashboard"
               onStartNew={handleStartNew}
               recentProjects={mockRecentProjects}
-              renderProgress={renderProgress.status !== 'idle' ? renderProgress : undefined}
+              renderProgress={render.progress.status !== 'idle' ? render.progress : undefined}
             />
           )}
 
@@ -213,10 +165,10 @@ function App() {
           {currentView === 'render' && (
             <RenderView
               key="render"
-              progress={renderProgress}
+              progress={render.progress}
               subjects={config.sequence}
-              onPause={() => toast.info('Paused', 'Generation has been paused.')}
-              onRetry={simulateRender}
+              onPause={handlePauseRender}
+              onRetry={handleRetryRender}
               onDownload={handleDownload}
             />
           )}
