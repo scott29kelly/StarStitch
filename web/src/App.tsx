@@ -29,31 +29,11 @@ const defaultConfig: ProjectConfig = {
   ],
 };
 
-// Mock recent projects
+// Mock recent projects (will be replaced with API data in future)
 const mockRecentProjects = [
   { name: 'Eiffel Tower Stars', date: 'Jan 17, 2026', status: 'complete' as const },
   { name: 'Tech Legends', date: 'Jan 15, 2026', status: 'complete' as const },
   { name: 'Hollywood Icons', date: 'Jan 12, 2026', status: 'draft' as const },
-];
-
-// Mock gallery projects
-const mockGalleryProjects = [
-  { 
-    id: '1', 
-    name: 'Eiffel Tower Stars', 
-    date: 'Jan 17, 2026', 
-    duration: '0:25',
-    subjects: 5,
-    status: 'complete' as const,
-  },
-  { 
-    id: '2', 
-    name: 'Tech Legends', 
-    date: 'Jan 15, 2026', 
-    duration: '0:30',
-    subjects: 6,
-    status: 'complete' as const,
-  },
 ];
 
 function App() {
@@ -136,10 +116,6 @@ function App() {
     toast.success('Download Started', 'Your video is being downloaded...');
   };
 
-  const handleDeleteProject = (id: string) => {
-    toast.warning('Project Deleted', `Project ${id} has been removed.`);
-  };
-
   return (
     <>
       <Layout currentView={currentView} onViewChange={setCurrentView}>
@@ -174,13 +150,7 @@ function App() {
           )}
 
           {currentView === 'gallery' && (
-            <Gallery
-              key="gallery"
-              projects={mockGalleryProjects}
-              onDelete={handleDeleteProject}
-              onDownload={handleDownload}
-              onPlay={(id) => toast.info('Playing', `Opening video ${id}...`)}
-            />
+            <Gallery key="gallery" />
           )}
         </AnimatePresence>
       </Layout>
