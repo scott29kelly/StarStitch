@@ -13,7 +13,7 @@
       "aspect_ratio": "9:16",
       "transition_duration_sec": 5,
       "image_model": "black-forest-labs/flux-1.1-pro",
-      "video_model": "fal-ai/kling-video/v1.6/pro/image-to-video"
+      "video_provider": "replicate"
     },
     "global_scene": {
       "location_prompt": "taking a selfie, golden hour lighting, tourist photography style, 4k photorealistic",

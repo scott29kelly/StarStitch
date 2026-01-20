@@ -70,9 +70,10 @@ class Settings:
     aspect_ratio: str = "9:16"
     transition_duration_sec: int = 5
     image_model: str = "black-forest-labs/flux-1.1-pro"
-    video_model: str = "fal-ai/kling-video/v1.6/pro/image-to-video"
+    video_provider: str = "replicate"  # "replicate" (Veo 3.1 Fast ~1min), "fal" (Kling, slow)
+    video_model: str = ""  # Optional model override, empty uses provider default
     variants: List[str] = None  # Output variants like ["16:9", "1:1"]
-    
+
     def __post_init__(self):
         if self.variants is None:
             self.variants = []
@@ -96,7 +97,8 @@ class StarStitchConfig:
             aspect_ratio=settings_data.get("aspect_ratio", "9:16"),
             transition_duration_sec=settings_data.get("transition_duration_sec", 5),
             image_model=settings_data.get("image_model", "black-forest-labs/flux-1.1-pro"),
-            video_model=settings_data.get("video_model", "fal-ai/kling-video/v1.6/pro/image-to-video"),
+            video_provider=settings_data.get("video_provider", "replicate"),
+            video_model=settings_data.get("video_model", ""),
             variants=settings_data.get("variants", [])
         )
         
@@ -144,6 +146,7 @@ class StarStitchConfig:
                 "aspect_ratio": self.settings.aspect_ratio,
                 "transition_duration_sec": self.settings.transition_duration_sec,
                 "image_model": self.settings.image_model,
+                "video_provider": self.settings.video_provider,
                 "video_model": self.settings.video_model,
                 "variants": self.settings.variants
             },

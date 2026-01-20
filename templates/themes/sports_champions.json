@@ -13,7 +13,7 @@
       "aspect_ratio": "9:16",
       "transition_duration_sec": 4,
       "image_model": "black-forest-labs/flux-1.1-pro",
-      "video_model": "fal-ai/kling-video/v1.6/pro/image-to-video"
+      "video_provider": "replicate"
     },
     "global_scene": {
       "location_prompt": "sports arena, dramatic stadium lighting, victory moment, sports photography, 4k action shot",

@@ -136,7 +136,7 @@ class VideoGenerator:
         handler,
         on_progress: Optional[Callable[[str], None]] = None,
         poll_interval: int = 5,
-        max_wait: int = 600
+        max_wait: int = 900
     ) -> Dict[str, Any]:
         """Poll Fal.ai for job completion."""
         start_time = time.time()

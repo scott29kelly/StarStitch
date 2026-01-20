@@ -570,6 +570,18 @@ st.markdown("""
         color: var(--silver) !important;
         font-size: 0.8125rem !important;
     }
+
+    /* Constrain video player - 55vh is standard for media players with UI chrome */
+    .stVideo {
+        max-height: 55vh !important;
+        margin-bottom: 1rem;
+    }
+    .stVideo video {
+        max-height: 55vh !important;
+        width: auto !important;
+        margin: 0 auto;
+        display: block;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -586,7 +598,8 @@ def init_session_state():
         "aspect_ratio": "9:16",
         "transition_duration": 5,
         "image_model": "black-forest-labs/flux-1.1-pro",
-        "video_model": "fal-ai/kling-video/v1.6/pro/image-to-video",
+        "video_provider": "replicate",  # "replicate" (Veo 3.1 Fast ~1min), "fal" (Kling, slow)
+        "video_model": "",  # Optional model override
         "location_prompt": "taking a selfie at the Eiffel Tower, golden hour lighting, 4k photorealistic",
         "negative_prompt": "blurry, distorted, cartoon, low quality",
         "sequence": [
@@ -625,6 +638,12 @@ def init_session_state():
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
+
+    # Clear incompatible video_model strings from existing sessions
+    # This handles users who have an old session with fal-ai/kling models
+    if st.session_state.video_provider == "replicate" and st.session_state.video_model:
+        if "fal-ai" in st.session_state.video_model or "kling" in st.session_state.video_model.lower():
+            st.session_state.video_model = ""
 
 init_session_state()
 
@@ -665,7 +684,14 @@ def apply_config(config: dict):
         st.session_state.aspect_ratio = s.get("aspect_ratio", "9:16")
         st.session_state.transition_duration = s.get("transition_duration_sec", 5)
         st.session_state.image_model = s.get("image_model", st.session_state.image_model)
-        st.session_state.video_model = s.get("video_model", st.session_state.video_model)
+        st.session_state.video_provider = s.get("video_provider", st.session_state.video_provider)
+        # Only use video_model from config if it matches the current provider
+        # Ignore fal-ai/kling model strings when using replicate provider
+        config_model = s.get("video_model", "")
+        if st.session_state.video_provider == "replicate" and config_model:
+            if "fal-ai" in config_model or "kling" in config_model.lower():
+                config_model = ""  # Clear incompatible model
+        st.session_state.video_model = config_model if config_model else st.session_state.video_model
     if "global_scene" in config:
         g = config["global_scene"]
         st.session_state.location_prompt = g.get("location_prompt", "")
@@ -693,6 +719,7 @@ def export_config() -> dict:
             "aspect_ratio": st.session_state.aspect_ratio,
             "transition_duration_sec": st.session_state.transition_duration,
             "image_model": st.session_state.image_model,
+            "video_provider": st.session_state.video_provider,
             "video_model": st.session_state.video_model,
             "variants": st.session_state.selected_variants if st.session_state.variants_enabled else []
         },
@@ -717,7 +744,7 @@ def export_config() -> dict:
 def apply_template_to_state(template: Template):
     """Apply a template to the current session state."""
     config = template.base_config
-    
+
     if "project_name" in config:
         st.session_state.project_name = config["project_name"]
     if "output_folder" in config:
@@ -727,7 +754,15 @@ def apply_template_to_state(template: Template):
         st.session_state.aspect_ratio = s.get("aspect_ratio", "9:16")
         st.session_state.transition_duration = s.get("transition_duration_sec", 5)
         st.session_state.image_model = s.get("image_model", st.session_state.image_model)
-        st.session_state.video_model = s.get("video_model", st.session_state.video_model)
+        st.session_state.video_provider = s.get("video_provider", st.session_state.video_provider)
+        # Only use video_model from template if it matches the current provider
+        # Ignore fal-ai/kling model strings when using replicate provider
+        template_model = s.get("video_model", "")
+        if st.session_state.video_provider == "replicate" and template_model:
+            # Check if model is incompatible with Replicate (e.g., fal-ai, kling)
+            if "fal-ai" in template_model or "kling" in template_model.lower():
+                template_model = ""  # Clear incompatible model
+        st.session_state.video_model = template_model if template_model else st.session_state.video_model
         if "variants" in s:
             st.session_state.selected_variants = s["variants"]
             st.session_state.variants_enabled = len(s["variants"]) > 0
@@ -879,16 +914,24 @@ with st.sidebar:
         help="Model used for generating subject images"
     )
     
-    video_models = [
-        "fal-ai/kling-video/v1.6/pro/image-to-video",
-        "fal-ai/kling-video/v1.5/pro/image-to-video",
-        "fal-ai/luma-dream-machine"
-    ]
-    st.session_state.video_model = st.selectbox(
-        "Video Model",
-        options=video_models,
-        index=video_models.index(st.session_state.video_model) if st.session_state.video_model in video_models else 0,
-        help="Model used for morphing transitions"
+    # Video provider selection - Replicate/Veo is fastest and uses existing API key
+    video_providers = ["replicate", "fal", "runway", "luma"]
+    provider_labels = {
+        "replicate": "Veo 3.1 Fast via Replicate (~1 min, $0.10/sec)",
+        "fal": "Fal.ai / Kling (Slow 10+ min, $0.07/sec)",
+        "runway": "Runway Gen-3 (requires separate API key)",
+        "luma": "Luma Dream Machine"
+    }
+    current_provider = st.session_state.video_provider
+    if current_provider not in video_providers:
+        current_provider = "replicate"
+
+    st.session_state.video_provider = st.selectbox(
+        "Video Provider",
+        options=video_providers,
+        index=video_providers.index(current_provider),
+        format_func=lambda x: provider_labels.get(x, x),
+        help="Veo 3.1 Fast is recommended - uses your existing Replicate key, ~1 min per video"
     )
     
     st.markdown("---")
@@ -1630,17 +1673,37 @@ with tab_generate:
     
     # Check API keys (environment)
     replicate_key = os.environ.get("REPLICATE_API_TOKEN", "")
-    fal_key = os.environ.get("FAL_KEY", "")
-    
+
     if not replicate_key:
         checks.append(("⚠️", "REPLICATE_API_TOKEN not set in environment", False))
     else:
         checks.append(("✓", "Replicate API configured", True))
-    
-    if not fal_key:
-        checks.append(("⚠️", "FAL_KEY not set in environment", False))
-    else:
-        checks.append(("✓", "Fal.ai API configured", True))
+
+    # Check video provider API key based on selected provider
+    video_provider = st.session_state.video_provider
+    if video_provider == "replicate":
+        # Replicate uses same key as image generation - already validated above
+        if replicate_key:
+            checks.append(("✓", "Video: Veo 3.1 Fast via Replicate (~1 min/video)", True))
+        # If not set, the Replicate check above already flagged it
+    elif video_provider == "runway":
+        runway_key = os.environ.get("RUNWAY_API_KEY", "")
+        if not runway_key:
+            checks.append(("⚠️", "RUNWAY_API_KEY not set in environment", False))
+        else:
+            checks.append(("✓", "Runway API configured", True))
+    elif video_provider == "fal":
+        fal_key = os.environ.get("FAL_KEY", "")
+        if not fal_key:
+            checks.append(("⚠️", "FAL_KEY not set in environment", False))
+        else:
+            checks.append(("✓", "Fal.ai/Kling API configured (slow 10+ min/video)", True))
+    elif video_provider == "luma":
+        luma_key = os.environ.get("LUMAAI_API_KEY", "")
+        if not luma_key:
+            checks.append(("⚠️", "LUMAAI_API_KEY not set in environment", False))
+        else:
+            checks.append(("✓", "Luma AI API configured", True))
     
     # Check audio configuration (v0.4)
     if st.session_state.audio_enabled:
@@ -1777,8 +1840,10 @@ with tab_generate:
         if progress.final_video_path and progress.final_video_path.exists():
             st.markdown("##### Final Video")
 
-            # Video player
-            st.video(str(progress.final_video_path))
+            # Constrain video to ~40% width using columns
+            col_video, col_spacer = st.columns([2, 3])
+            with col_video:
+                st.video(str(progress.final_video_path))
 
             # File info
             file_size = progress.final_video_path.stat().st_size / (1024 * 1024)

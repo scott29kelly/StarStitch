@@ -21,7 +21,8 @@ from typing import Optional, Callable, List, Dict, Any
 
 from dotenv import load_dotenv
 
-from providers import ImageGenerator, VideoGenerator
+from providers import ImageGenerator
+from providers.video_provider_factory import create_video_generator
 from utils import FFmpegUtils, FileManager, AudioUtils, BatchProcessor, TemplateLoader
 
 # Load environment variables
@@ -71,8 +72,21 @@ class StarStitchPipeline:
         self.image_gen = ImageGenerator(
             model=settings.get("image_model", "black-forest-labs/flux-1.1-pro")
         )
-        self.video_gen = VideoGenerator(
-            model=settings.get("video_model", "fal-ai/kling-video/v1.6/pro/image-to-video")
+
+        # Use video provider factory - default to Replicate/Veo 3.1 Fast (~1 min/video)
+        video_provider = settings.get("video_provider", "replicate")
+        video_model = settings.get("video_model") or None  # None uses provider default
+
+        # Clear incompatible model strings when using Replicate provider
+        # This handles legacy configs that may have fal-ai/kling models
+        if video_provider == "replicate" and video_model:
+            if "fal-ai" in video_model or "kling" in video_model.lower() or "luma" in video_model.lower():
+                logger.warning(f"Ignoring incompatible video model '{video_model}' for Replicate provider")
+                video_model = None
+
+        self.video_gen = create_video_generator(
+            provider=video_provider,
+            model=video_model
         )
         self.ffmpeg = FFmpegUtils()
         self.audio_utils = AudioUtils()

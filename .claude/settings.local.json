@@ -5,7 +5,10 @@
       "Bash(npm run dev:*)",
       "Bash(timeout:*)",
       "Bash(pip show:*)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(python:*)",
+      "Bash(curl:*)",
+      "Bash(git add:*)"
     ]
   }
 }

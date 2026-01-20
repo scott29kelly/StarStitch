@@ -11,6 +11,7 @@ from .base_provider import VideoGenerationError
 from .fal_video_generator import FalVideoGenerator
 from .runway_generator import RunwayVideoGenerator
 from .luma_generator import LumaVideoGenerator
+from .replicate_video_generator import ReplicateVideoGenerator
 
 
 class VideoProviderFactory:
@@ -175,10 +176,12 @@ VideoProviderFactory.register("fal", FalVideoGenerator)
 VideoProviderFactory.register("kling", FalVideoGenerator)  # Alias for fal
 VideoProviderFactory.register("runway", RunwayVideoGenerator)
 VideoProviderFactory.register("luma", LumaVideoGenerator)
+VideoProviderFactory.register("replicate", ReplicateVideoGenerator)  # Veo 3.1 Fast - fast & cheap
+VideoProviderFactory.register("veo", ReplicateVideoGenerator)  # Alias for replicate
 
 
 def create_video_generator(
-    provider: str = "fal",
+    provider: str = "replicate",
     api_key: Optional[str] = None,
     model: Optional[str] = None,
     logger: Optional[logging.Logger] = None,
