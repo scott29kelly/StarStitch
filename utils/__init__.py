@@ -9,6 +9,7 @@ from .file_manager import FileManager
 from .audio_utils import AudioUtils, AudioInfo
 from .batch_processor import BatchProcessor, BatchSummary, BatchJobResult
 from .template_loader import TemplateLoader, Template
+from .streamlit_runner import PipelineRunner, PipelineProgress, PipelineStatus
 
 __all__ = [
     "FFmpegUtils",
@@ -20,4 +21,7 @@ __all__ = [
     "BatchJobResult",
     "TemplateLoader",
     "Template",
+    "PipelineRunner",
+    "PipelineProgress",
+    "PipelineStatus",
 ]

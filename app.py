@@ -10,8 +10,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 import uuid
+from dotenv import load_dotenv
 
+# Load environment variables from .env.local or .env
+load_dotenv(".env.local")
+load_dotenv(".env")  # Fallback to .env if .env.local doesn't exist
+
+import time
 from utils import TemplateLoader, Template, BatchProcessor, BatchSummary
+from utils import PipelineRunner, PipelineProgress, PipelineStatus
 
 # Page configuration - must be first Streamlit command
 st.set_page_config(
@@ -27,26 +34,61 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    /* Root variables */
+    /* ============================================================
+       StarStitch Design System - Aligned with React Frontend
+       ============================================================ */
+
+    /* Font imports */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+    /* Root variables - Deep Space Theme */
     :root {
-        --bg-primary: #0a0a0b;
-        --bg-secondary: #141417;
-        --bg-elevated: #1a1a1f;
-        --text-primary: #fafafa;
-        --text-secondary: #a1a1aa;
-        --text-muted: #71717a;
-        --accent: #8b5cf6;
-        --accent-hover: #a78bfa;
+        /* Background layers */
+        --void: #050507;
+        --obsidian: #0a0a0f;
+        --slate: #12121a;
+        --ash: #1a1a24;
+        --smoke: #252532;
+        --mist: #3a3a4a;
+
+        /* Text hierarchy */
+        --snow: #f0f0f8;
+        --cloud: #c8c8d8;
+        --silver: #8888a0;
+
+        /* Aurora gradient */
+        --aurora-start: #6366f1;
+        --aurora-mid: #a855f7;
+        --aurora-end: #ec4899;
+
+        /* Neon accents */
+        --neon-cyan: #22d3ee;
+        --neon-emerald: #34d399;
+
+        /* Semantic */
         --success: #22c55e;
         --warning: #f59e0b;
         --error: #ef4444;
-        --border: #27272a;
-        --border-hover: #3f3f46;
+
+        /* Computed */
+        --accent: var(--aurora-mid);
+        --accent-hover: #b97afc;
+        --border: var(--mist);
+        --border-subtle: rgba(136, 136, 160, 0.15);
     }
 
-    /* Global overrides */
+    /* Global app styling */
     .stApp {
-        background: var(--bg-primary);
+        background: var(--obsidian) !important;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+        -webkit-font-smoothing: antialiased;
+    }
+
+    /* Base text styling */
+    .stApp, .stApp p, .stApp span, .stApp div {
+        color: var(--cloud);
+        font-size: 15px;
+        line-height: 1.6;
     }
 
     /* Hide default Streamlit elements */
@@ -54,125 +96,276 @@ st.markdown("""
     .stDeployButton {display: none;}
 
     /* Typography */
-    h1, h2, h3, h4 {
+    h1, h2, h3, h4, h5 {
+        font-family: 'Inter', sans-serif !important;
         font-weight: 600 !important;
         letter-spacing: -0.02em !important;
+        color: var(--snow) !important;
     }
 
-    /* Sidebar styling */
+    h1 { font-size: 1.875rem !important; }
+    h2 { font-size: 1.5rem !important; }
+    h3 { font-size: 1.25rem !important; }
+    h4 { font-size: 1.0625rem !important; }
+    h5 { font-size: 1rem !important; }
+
+    /* Markdown text */
+    .stMarkdown, .stMarkdown p {
+        color: var(--cloud) !important;
+    }
+
+    /* ============================================================
+       Sidebar
+       ============================================================ */
     section[data-testid="stSidebar"] {
-        background: var(--bg-secondary);
-        border-right: 1px solid var(--border);
+        background: var(--slate) !important;
+        border-right: 1px solid var(--border-subtle) !important;
     }
 
     section[data-testid="stSidebar"] .stMarkdown p {
-        color: var(--text-secondary);
+        color: var(--cloud) !important;
     }
 
-    /* Card-like containers */
+    section[data-testid="stSidebar"] h1,
+    section[data-testid="stSidebar"] h2,
+    section[data-testid="stSidebar"] h3,
+    section[data-testid="stSidebar"] h4 {
+        color: var(--snow) !important;
+    }
+
+    /* ============================================================
+       Glassmorphic Components
+       ============================================================ */
+
+    /* Expanders */
     .stExpander {
-        background: var(--bg-elevated) !important;
-        border: 1px solid var(--border) !important;
-        border-radius: 12px !important;
+        background: rgba(26, 26, 36, 0.6) !important;
+        backdrop-filter: blur(12px) !important;
+        -webkit-backdrop-filter: blur(12px) !important;
+        border: 1px solid var(--border-subtle) !important;
+        border-radius: 16px !important;
     }
 
-    /* Input fields */
-    .stTextInput input, .stTextArea textarea, .stSelectbox select {
-        background: var(--bg-secondary) !important;
-        border: 1px solid var(--border) !important;
-        border-radius: 8px !important;
-        color: var(--text-primary) !important;
+    .stExpander:hover {
+        border-color: rgba(136, 136, 160, 0.25) !important;
     }
 
-    .stTextInput input:focus, .stTextArea textarea:focus {
-        border-color: var(--accent) !important;
-        box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2) !important;
+    /* Container borders */
+    [data-testid="stVerticalBlock"] > div:has(> .stExpander) {
+        border-radius: 16px;
     }
 
-    /* Buttons */
+    /* ============================================================
+       Input Fields
+       ============================================================ */
+    .stTextInput input,
+    .stTextArea textarea,
+    .stSelectbox > div > div,
+    .stMultiSelect > div > div {
+        background: var(--smoke) !important;
+        border: 1px solid var(--border-subtle) !important;
+        border-radius: 10px !important;
+        color: var(--snow) !important;
+        font-family: 'Inter', sans-serif !important;
+        font-size: 15px !important;
+        padding: 0.625rem 0.875rem !important;
+    }
+
+    .stTextInput input::placeholder,
+    .stTextArea textarea::placeholder {
+        color: var(--silver) !important;
+    }
+
+    .stTextInput input:focus,
+    .stTextArea textarea:focus,
+    .stSelectbox > div > div:focus-within {
+        border-color: var(--aurora-mid) !important;
+        box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.2), 0 0 20px rgba(168, 85, 247, 0.1) !important;
+        outline: none !important;
+    }
+
+    /* Labels */
+    .stTextInput label,
+    .stTextArea label,
+    .stSelectbox label,
+    .stSlider label,
+    .stCheckbox label,
+    .stRadio label {
+        color: var(--cloud) !important;
+        font-size: 0.9375rem !important;
+        font-weight: 500 !important;
+    }
+
+    /* ============================================================
+       Buttons
+       ============================================================ */
     .stButton > button {
-        background: var(--accent) !important;
+        background: linear-gradient(135deg, var(--aurora-start), var(--aurora-mid)) !important;
         color: white !important;
         border: none !important;
-        border-radius: 8px !important;
+        border-radius: 10px !important;
+        font-family: 'Inter', sans-serif !important;
         font-weight: 500 !important;
-        padding: 0.5rem 1.5rem !important;
+        font-size: 0.9375rem !important;
+        padding: 0.625rem 1.5rem !important;
         transition: all 0.2s ease !important;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25) !important;
     }
 
     .stButton > button:hover {
-        background: var(--accent-hover) !important;
-        transform: translateY(-1px);
+        background: linear-gradient(135deg, var(--aurora-mid), var(--aurora-end)) !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 6px 20px rgba(168, 85, 247, 0.35) !important;
     }
 
-    /* Secondary buttons */
-    .stButton > button[kind="secondary"] {
+    .stButton > button:active {
+        transform: translateY(0) !important;
+    }
+
+    .stButton > button:disabled {
+        background: var(--smoke) !important;
+        color: var(--silver) !important;
+        box-shadow: none !important;
+        cursor: not-allowed !important;
+    }
+
+    /* Secondary/outline buttons (using container styling) */
+    .stButton > button[kind="secondary"],
+    [data-testid="baseButton-secondary"] {
         background: transparent !important;
         border: 1px solid var(--border) !important;
-        color: var(--text-secondary) !important;
+        color: var(--cloud) !important;
+        box-shadow: none !important;
     }
 
-    /* Slider styling */
-    .stSlider > div > div {
-        background: var(--accent) !important;
+    [data-testid="baseButton-secondary"]:hover {
+        background: var(--smoke) !important;
+        border-color: var(--silver) !important;
     }
 
-    /* Progress bar */
+    /* ============================================================
+       Sliders & Progress
+       ============================================================ */
+    .stSlider > div > div > div {
+        background: linear-gradient(90deg, var(--aurora-start), var(--aurora-mid)) !important;
+    }
+
+    .stSlider > div > div > div > div {
+        background: var(--snow) !important;
+        border: 2px solid var(--aurora-mid) !important;
+    }
+
     .stProgress > div > div {
-        background: var(--accent) !important;
+        background: linear-gradient(90deg, var(--aurora-start), var(--aurora-mid)) !important;
     }
 
-    /* Custom card component */
+    /* ============================================================
+       Tabs
+       ============================================================ */
+    .stTabs [data-baseweb="tab-list"] {
+        background: var(--slate) !important;
+        border-radius: 12px !important;
+        padding: 4px !important;
+        gap: 4px !important;
+    }
+
+    .stTabs [data-baseweb="tab"] {
+        background: transparent !important;
+        color: var(--silver) !important;
+        border-radius: 8px !important;
+        padding: 0.5rem 1rem !important;
+        font-weight: 500 !important;
+    }
+
+    .stTabs [aria-selected="true"] {
+        background: var(--ash) !important;
+        color: var(--snow) !important;
+    }
+
+    .stTabs [data-baseweb="tab-highlight"] {
+        background: transparent !important;
+    }
+
+    .stTabs [data-baseweb="tab-border"] {
+        display: none !important;
+    }
+
+    /* ============================================================
+       Custom Components
+       ============================================================ */
+
+    /* Glass card */
+    .glass-card {
+        background: rgba(26, 26, 36, 0.6);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid var(--border-subtle);
+        border-radius: 16px;
+        padding: 1.5rem;
+        transition: all 0.2s ease;
+    }
+
+    .glass-card:hover {
+        border-color: rgba(136, 136, 160, 0.25);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Subject card */
     .subject-card {
-        background: var(--bg-elevated);
-        border: 1px solid var(--border);
+        background: var(--ash);
+        border: 1px solid var(--border-subtle);
         border-radius: 12px;
         padding: 1.25rem;
         margin-bottom: 1rem;
-        transition: border-color 0.2s ease;
+        transition: all 0.2s ease;
     }
 
     .subject-card:hover {
-        border-color: var(--border-hover);
+        border-color: rgba(136, 136, 160, 0.3);
     }
 
     .subject-card.anchor {
-        border-left: 3px solid var(--accent);
+        border-left: 3px solid var(--aurora-mid);
     }
 
     /* Status badges */
     .status-badge {
         display: inline-flex;
         align-items: center;
-        padding: 0.25rem 0.75rem;
+        padding: 0.3rem 0.875rem;
         border-radius: 9999px;
-        font-size: 0.75rem;
+        font-size: 0.8125rem;
         font-weight: 500;
     }
 
     .status-pending {
-        background: rgba(113, 113, 122, 0.2);
-        color: var(--text-muted);
+        background: rgba(136, 136, 160, 0.2);
+        color: var(--silver);
     }
 
     .status-processing {
-        background: rgba(139, 92, 246, 0.2);
-        color: var(--accent);
+        background: rgba(168, 85, 247, 0.25);
+        color: var(--aurora-mid);
     }
 
     .status-complete {
-        background: rgba(34, 197, 94, 0.2);
+        background: rgba(34, 197, 94, 0.25);
         color: var(--success);
+    }
+
+    .status-error {
+        background: rgba(239, 68, 68, 0.25);
+        color: var(--error);
     }
 
     /* Header styling */
     .header-container {
         display: flex;
         align-items: center;
-        gap: 0.75rem;
+        gap: 1rem;
         margin-bottom: 2rem;
         padding-bottom: 1.5rem;
-        border-bottom: 1px solid var(--border);
+        border-bottom: 1px solid var(--border-subtle);
     }
 
     .header-logo {
@@ -181,72 +374,113 @@ st.markdown("""
     }
 
     .header-title {
-        font-size: 1.75rem;
+        font-size: 1.875rem;
         font-weight: 700;
-        color: var(--text-primary);
+        color: var(--snow);
         margin: 0;
+        background: linear-gradient(135deg, var(--snow), var(--cloud));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
     }
 
     .header-subtitle {
-        font-size: 0.875rem;
-        color: var(--text-muted);
+        font-size: 0.9375rem;
+        color: var(--silver);
         margin: 0;
     }
 
     /* Metric cards */
     .metric-card {
-        background: var(--bg-elevated);
-        border: 1px solid var(--border);
+        background: var(--ash);
+        border: 1px solid var(--border-subtle);
         border-radius: 12px;
-        padding: 1rem 1.25rem;
+        padding: 1.25rem;
         text-align: center;
     }
 
     .metric-value {
-        font-size: 1.5rem;
+        font-size: 1.75rem;
         font-weight: 600;
-        color: var(--text-primary);
+        color: var(--snow);
+        font-family: 'Inter', sans-serif;
     }
 
     .metric-label {
-        font-size: 0.75rem;
-        color: var(--text-muted);
+        font-size: 0.8125rem;
+        color: var(--silver);
         text-transform: uppercase;
         letter-spacing: 0.05em;
+        margin-top: 0.25rem;
     }
 
     /* JSON preview */
     .json-preview {
-        background: var(--bg-secondary);
-        border: 1px solid var(--border);
-        border-radius: 8px;
+        background: var(--slate);
+        border: 1px solid var(--border-subtle);
+        border-radius: 10px;
         padding: 1rem;
-        font-family: 'SF Mono', 'Fira Code', monospace;
-        font-size: 0.8rem;
+        font-family: 'JetBrains Mono', 'SF Mono', monospace;
+        font-size: 0.875rem;
+        color: var(--cloud);
         overflow-x: auto;
-    }
-
-    /* Divider */
-    .section-divider {
-        height: 1px;
-        background: var(--border);
-        margin: 2rem 0;
     }
 
     /* Empty state */
     .empty-state {
         text-align: center;
-        padding: 3rem;
-        color: var(--text-muted);
+        padding: 3rem 2rem;
+        color: var(--silver);
     }
 
     .empty-state-icon {
-        font-size: 3rem;
+        font-size: 3.5rem;
         margin-bottom: 1rem;
-        opacity: 0.5;
+        opacity: 0.6;
     }
 
-    /* Animation keyframes */
+    .empty-state p {
+        font-size: 1rem;
+        color: var(--cloud);
+        margin: 0.5rem 0;
+    }
+
+    .empty-state p:last-child {
+        font-size: 0.875rem;
+        color: var(--silver);
+    }
+
+    /* Info/alert boxes */
+    .info-box {
+        background: rgba(99, 102, 241, 0.15);
+        border: 1px solid rgba(99, 102, 241, 0.3);
+        border-radius: 10px;
+        padding: 1rem;
+        color: var(--cloud);
+    }
+
+    .success-box {
+        background: rgba(34, 197, 94, 0.15);
+        border: 1px solid rgba(34, 197, 94, 0.3);
+        border-radius: 10px;
+        padding: 1rem;
+    }
+
+    /* Divider */
+    .section-divider {
+        height: 1px;
+        background: var(--border-subtle);
+        margin: 2rem 0;
+    }
+
+    /* Streamlit native divider */
+    hr {
+        border-color: var(--border-subtle) !important;
+    }
+
+    /* ============================================================
+       Animations
+       ============================================================ */
     @keyframes pulse {
         0%, 100% { opacity: 1; }
         50% { opacity: 0.5; }
@@ -254,6 +488,87 @@ st.markdown("""
 
     .processing {
         animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes shimmer {
+        0% { background-position: -200% 0; }
+        100% { background-position: 200% 0; }
+    }
+
+    .shimmer {
+        background: linear-gradient(90deg, var(--ash) 25%, var(--smoke) 50%, var(--ash) 75%);
+        background-size: 200% 100%;
+        animation: shimmer 1.5s infinite;
+    }
+
+    /* ============================================================
+       Streamlit Component Overrides
+       ============================================================ */
+
+    /* File uploader */
+    .stFileUploader {
+        background: var(--smoke) !important;
+        border: 1px dashed var(--border) !important;
+        border-radius: 10px !important;
+    }
+
+    /* Checkbox */
+    .stCheckbox > label > span {
+        color: var(--cloud) !important;
+    }
+
+    /* Toggle */
+    [data-testid="stToggle"] span {
+        color: var(--cloud) !important;
+    }
+
+    /* Metric delta */
+    [data-testid="stMetricDelta"] {
+        color: var(--cloud) !important;
+    }
+
+    /* Info/warning/error boxes */
+    .stAlert {
+        background: var(--ash) !important;
+        border-radius: 10px !important;
+    }
+
+    /* Code blocks */
+    .stCodeBlock {
+        background: var(--slate) !important;
+        border-radius: 10px !important;
+    }
+
+    code {
+        font-family: 'JetBrains Mono', monospace !important;
+        background: var(--smoke) !important;
+        color: var(--neon-cyan) !important;
+        padding: 0.125rem 0.375rem !important;
+        border-radius: 4px !important;
+    }
+
+    /* Download button */
+    .stDownloadButton > button {
+        background: var(--smoke) !important;
+        border: 1px solid var(--border) !important;
+        color: var(--cloud) !important;
+        box-shadow: none !important;
+    }
+
+    .stDownloadButton > button:hover {
+        background: var(--ash) !important;
+        border-color: var(--silver) !important;
+    }
+
+    /* Container borders */
+    [data-testid="stHorizontalBlock"] {
+        gap: 1rem;
+    }
+
+    /* Captions */
+    .stCaption {
+        color: var(--silver) !important;
+        font-size: 0.8125rem !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -303,6 +618,8 @@ def init_session_state():
         # Batch state (v0.5)
         "batch_status": "idle",
         "batch_summary": None,
+        # Pipeline runner (v0.5)
+        "pipeline_runner": None,
     }
     
     for key, value in defaults.items():
@@ -507,8 +824,8 @@ with st.sidebar:
     st.markdown("""
     <div style="margin-bottom: 2rem;">
         <span style="font-size: 2rem;">🌟</span>
-        <span style="font-size: 1.25rem; font-weight: 600; margin-left: 0.5rem;">StarStitch</span>
-        <p style="color: #71717a; font-size: 0.75rem; margin-top: 0.25rem;">v0.5 Batch Processing & Templates</p>
+        <span style="font-size: 1.25rem; font-weight: 600; margin-left: 0.5rem; color: var(--snow);">StarStitch</span>
+        <p style="color: var(--silver); font-size: 0.8125rem; margin-top: 0.25rem;">v0.5 Batch Processing & Templates</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -674,7 +991,7 @@ with tab_templates:
         <div class="empty-state">
             <div class="empty-state-icon">📁</div>
             <p>No templates found</p>
-            <p style="font-size: 0.75rem;">Templates should be in the ./templates directory</p>
+            <p>Templates should be in the ./templates directory</p>
         </div>
         """, unsafe_allow_html=True)
     else:
@@ -858,7 +1175,7 @@ with tab_sequence:
                             st.rerun()
         
         if i < len(st.session_state.sequence) - 1:
-            st.markdown('<div style="text-align: center; color: #71717a; margin: 0.5rem 0;">↓ morphs into ↓</div>', unsafe_allow_html=True)
+            st.markdown('<div style="text-align: center; color: var(--silver); margin: 0.5rem 0; font-size: 0.875rem;">↓ morphs into ↓</div>', unsafe_allow_html=True)
     
     # Add subject button
     st.markdown("---")
@@ -1066,7 +1383,7 @@ with tab_audio:
         <div class="empty-state">
             <div class="empty-state-icon">🔇</div>
             <p>Audio is disabled</p>
-            <p style="font-size: 0.75rem;">Enable the toggle above to add background music</p>
+            <p>Enable the toggle above to add background music</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -1124,16 +1441,16 @@ with tab_variants:
                 if is_primary:
                     st.markdown(f"""
                     <div style="
-                        background: rgba(34, 197, 94, 0.1);
-                        border: 1px solid #22c55e;
-                        border-radius: 8px;
-                        padding: 0.75rem;
+                        background: rgba(34, 197, 94, 0.15);
+                        border: 1px solid rgba(34, 197, 94, 0.4);
+                        border-radius: 10px;
+                        padding: 1rem;
                         margin-bottom: 0.5rem;
                     ">
                         <span style="font-size: 1.25rem;">{info['icon']}</span>
-                        <span style="font-weight: 500; color: #22c55e; margin-left: 0.5rem;">{ratio}</span>
-                        <span style="color: #71717a; font-size: 0.75rem; display: block;">{info['name']}</span>
-                        <span style="color: #22c55e; font-size: 0.65rem;">PRIMARY</span>
+                        <span style="font-weight: 600; color: var(--neon-emerald); margin-left: 0.5rem;">{ratio}</span>
+                        <span style="color: var(--cloud); font-size: 0.875rem; display: block; margin-top: 0.25rem;">{info['name']}</span>
+                        <span style="color: var(--neon-emerald); font-size: 0.75rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em;">PRIMARY</span>
                     </div>
                     """, unsafe_allow_html=True)
                 else:
@@ -1160,16 +1477,10 @@ with tab_variants:
         
         if total_variants > 0:
             st.markdown("""
-            <div style="
-                background: rgba(139, 92, 246, 0.1);
-                border: 1px solid #8b5cf6;
-                border-radius: 8px;
-                padding: 0.75rem;
-                margin-top: 1rem;
-            ">
-                <span style="color: #a78bfa;">ℹ️</span>
-                <span style="color: #a1a1aa; font-size: 0.85rem;">
-                    Variants are created by cropping and scaling the final video. 
+            <div class="info-box" style="margin-top: 1rem;">
+                <span style="color: var(--aurora-mid);">ℹ️</span>
+                <span style="color: var(--cloud); font-size: 0.9375rem; margin-left: 0.5rem;">
+                    Variants are created by cropping and scaling the final video.
                     Center framing works best for multi-ratio output.
                 </span>
             </div>
@@ -1180,7 +1491,7 @@ with tab_variants:
         <div class="empty-state">
             <div class="empty-state-icon">📐</div>
             <p>Variants are disabled</p>
-            <p style="font-size: 0.75rem;">Enable to generate multiple aspect ratio versions</p>
+            <p>Enable to generate multiple aspect ratio versions</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -1203,21 +1514,22 @@ with tab_preview:
         seq_cols = st.columns(min(len(st.session_state.sequence), 5))
         for i, (col, subject) in enumerate(zip(seq_cols, st.session_state.sequence[:5])):
             with col:
+                border_color = 'var(--aurora-mid)' if i == 0 else 'var(--border-subtle)'
                 st.markdown(f"""
                 <div style="
-                    background: #1a1a1f;
-                    border: 1px solid {'#8b5cf6' if i == 0 else '#27272a'};
-                    border-radius: 8px;
+                    background: var(--ash);
+                    border: 1px solid {border_color};
+                    border-radius: 10px;
                     padding: 1rem;
                     text-align: center;
                 ">
                     <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">
                         {'🎯' if i == 0 else '👤'}
                     </div>
-                    <div style="font-weight: 500; color: #fafafa; font-size: 0.875rem;">
+                    <div style="font-weight: 500; color: var(--snow); font-size: 0.9375rem;">
                         {subject['name']}
                     </div>
-                    <div style="color: #71717a; font-size: 0.7rem; margin-top: 0.25rem;">
+                    <div style="color: var(--silver); font-size: 0.8125rem; margin-top: 0.25rem;">
                         {'Anchor' if i == 0 else f'#{i}'}
                     </div>
                 </div>
@@ -1361,65 +1673,211 @@ with tab_generate:
         st.markdown(f'<span style="color: {color}; margin-right: 0.5rem;">{icon}</span> {message}', unsafe_allow_html=True)
     
     all_passed = all(c[2] for c in checks if c[0] != "⚠️")
-    
+
     st.markdown("---")
-    
-    # Generation controls
-    col_gen, col_status = st.columns([1, 2])
-    
+
+    # =========================================================================
+    # PIPELINE RUNNER INITIALIZATION
+    # =========================================================================
+
+    # Initialize runner if needed
+    if st.session_state.pipeline_runner is None:
+        st.session_state.pipeline_runner = PipelineRunner()
+
+    runner = st.session_state.pipeline_runner
+    progress = runner.get_progress()
+    is_running = runner.is_running()
+
+    # =========================================================================
+    # GENERATION CONTROLS
+    # =========================================================================
+
+    col_gen, col_cancel = st.columns([3, 1])
+
     with col_gen:
-        generate_disabled = not all_passed
-        
+        # Determine button state
+        generate_disabled = not all_passed or is_running
+
+        button_label = "🚀 Start Generation"
+        if is_running:
+            button_label = "⏳ Generating..."
+        elif progress.status == PipelineStatus.COMPLETE:
+            button_label = "🔄 Generate Again"
+
         if st.button(
-            "🚀 Start Generation",
+            button_label,
             disabled=generate_disabled,
             use_container_width=True,
             type="primary"
         ):
-            st.session_state.pipeline_status = "running"
-            st.session_state.total_steps = len(st.session_state.sequence) + estimates["videos"]
-            st.session_state.current_step = 0
-            
-            # Save config to file for CLI usage
-            config_path = Path(st.session_state.output_folder) / f"{st.session_state.project_name}_config.json"
-            config_path.parent.mkdir(parents=True, exist_ok=True)
-            
-            with open(config_path, "w") as f:
-                json.dump(export_config(), f, indent=2)
-            
-            st.success(f"Config saved to `{config_path}`")
-            st.info("Run `python main.py --config {config_path}` to start generation.")
-        
-        if generate_disabled:
-            st.caption("Fix the issues above to enable generation")
-    
-    with col_status:
-        if st.session_state.pipeline_status == "running":
-            progress = st.session_state.current_step / max(st.session_state.total_steps, 1)
-            st.progress(progress, text=f"Step {st.session_state.current_step}/{st.session_state.total_steps}")
-        elif st.session_state.pipeline_status == "complete":
-            st.success("Generation complete!")
-        elif st.session_state.pipeline_status == "error":
-            st.error("Generation failed. Check logs for details.")
-    
-    # Pipeline status placeholder
+            # Reset if previous run completed
+            if progress.status in [PipelineStatus.COMPLETE, PipelineStatus.ERROR, PipelineStatus.CANCELLED]:
+                runner.reset()
+
+            # Get config and start pipeline
+            config = export_config()
+            runner.start(config)
+            st.rerun()
+
+    with col_cancel:
+        if is_running:
+            if st.button("Cancel", use_container_width=True, type="secondary"):
+                runner.cancel()
+                st.rerun()
+
+    if generate_disabled and not is_running:
+        st.caption("Fix the issues above to enable generation")
+
+    # =========================================================================
+    # PROGRESS DISPLAY
+    # =========================================================================
+
     st.markdown("---")
-    st.markdown("##### Pipeline Status")
-    
-    if st.session_state.pipeline_status == "idle":
+
+    if is_running:
+        # Show active progress
+        st.markdown("##### Pipeline Running")
+
+        # Progress bar
+        if progress.total_steps > 0:
+            pct = progress.current_step / progress.total_steps
+            st.progress(pct, text=f"Step {progress.current_step}/{progress.total_steps}")
+        else:
+            st.progress(0.0, text="Initializing...")
+
+        # Current phase/action
+        if progress.current_phase:
+            st.markdown(f"**{progress.current_phase}**")
+        if progress.current_action:
+            st.info(progress.current_action)
+
+        # Elapsed time
+        if progress.started_at:
+            elapsed = (datetime.now() - progress.started_at).total_seconds()
+            st.caption(f"Elapsed: {int(elapsed // 60)}m {int(elapsed % 60)}s")
+
+        # Auto-refresh every 2 seconds
+        time.sleep(2)
+        st.rerun()
+
+    elif progress.status == PipelineStatus.COMPLETE:
+        # =====================================================================
+        # SUCCESS: DISPLAY RESULTS
+        # =====================================================================
+        st.markdown("##### Generation Complete!")
+
+        # Completion time
+        if progress.started_at and progress.completed_at:
+            duration = (progress.completed_at - progress.started_at).total_seconds()
+            st.success(f"Completed in {int(duration // 60)}m {int(duration % 60)}s")
+
+        st.markdown("---")
+
+        # Main video display
+        if progress.final_video_path and progress.final_video_path.exists():
+            st.markdown("##### Final Video")
+
+            # Video player
+            st.video(str(progress.final_video_path))
+
+            # File info
+            file_size = progress.final_video_path.stat().st_size / (1024 * 1024)
+            col_info1, col_info2 = st.columns(2)
+            with col_info1:
+                st.caption(f"**Size:** {file_size:.1f} MB")
+            with col_info2:
+                st.caption(f"**Path:** `{progress.final_video_path}`")
+
+            # Download button
+            with open(progress.final_video_path, "rb") as f:
+                st.download_button(
+                    label="⬇️ Download Video",
+                    data=f.read(),
+                    file_name=progress.final_video_path.name,
+                    mime="video/mp4",
+                    use_container_width=True
+                )
+
+        # Variant videos
+        if progress.variant_paths:
+            st.markdown("---")
+            st.markdown("##### Format Variants")
+
+            # Display variants in a grid
+            num_variants = len(progress.variant_paths)
+            variant_cols = st.columns(min(num_variants, 3))
+
+            for i, (ratio, path) in enumerate(progress.variant_paths.items()):
+                with variant_cols[i % 3]:
+                    if path.exists():
+                        st.markdown(f"**{ratio}**")
+                        st.video(str(path))
+
+                        file_size = path.stat().st_size / (1024 * 1024)
+                        st.caption(f"{file_size:.1f} MB")
+
+                        with open(path, "rb") as f:
+                            st.download_button(
+                                label=f"⬇️ {ratio}",
+                                data=f.read(),
+                                file_name=path.name,
+                                mime="video/mp4",
+                                key=f"download_{ratio.replace(':', '_')}",
+                                use_container_width=True
+                            )
+
+        # Render directory link
+        if progress.render_dir and progress.render_dir.exists():
+            st.markdown("---")
+            st.caption(f"All assets saved to: `{progress.render_dir}`")
+
+    elif progress.status == PipelineStatus.ERROR:
+        # =====================================================================
+        # ERROR STATE
+        # =====================================================================
+        st.markdown("##### Generation Failed")
+        st.error(f"Error: {progress.error_message}")
+
+        st.markdown("**Troubleshooting:**")
+        st.markdown("""
+        - Check your API keys are valid
+        - Verify network connectivity
+        - Check the logs below for details
+        """)
+
+        if st.button("🔄 Try Again"):
+            runner.reset()
+            st.rerun()
+
+    elif progress.status == PipelineStatus.CANCELLED:
+        st.warning("Generation was cancelled.")
+        if st.button("🔄 Start Fresh"):
+            runner.reset()
+            st.rerun()
+
+    else:
+        # IDLE state - show ready message
+        st.markdown("##### Pipeline Status")
         st.markdown("""
         <div class="empty-state">
             <div class="empty-state-icon">🎬</div>
             <p>Ready to generate</p>
-            <p style="font-size: 0.75rem;">Configure your sequence and click Start Generation</p>
+            <p>Configure your sequence and click Start Generation</p>
         </div>
         """, unsafe_allow_html=True)
-    else:
-        # Show logs
-        with st.expander("View Logs", expanded=True):
-            if st.session_state.logs:
-                for log in st.session_state.logs[-20:]:  # Last 20 logs
-                    st.text(log)
+
+    # =========================================================================
+    # LOGS SECTION (always visible when not idle)
+    # =========================================================================
+    if progress.status != PipelineStatus.IDLE:
+        st.markdown("---")
+        st.markdown("##### Pipeline Logs")
+
+        with st.expander("View Logs", expanded=is_running):
+            if progress.logs:
+                # Display logs in reverse order (newest first)
+                log_text = "\n".join(reversed(progress.logs[-50:]))
+                st.code(log_text, language=None)
             else:
                 st.text("No logs yet...")
 
@@ -1430,7 +1888,7 @@ with tab_generate:
 
 st.markdown("---")
 st.markdown("""
-<div style="text-align: center; color: #71717a; font-size: 0.75rem; padding: 1rem 0;">
+<div style="text-align: center; color: var(--silver); font-size: 0.8125rem; padding: 1.5rem 0;">
     StarStitch v0.5 — Batch Processing & Templates — Built with Streamlit
 </div>
 """, unsafe_allow_html=True)
