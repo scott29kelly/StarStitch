@@ -1,0 +1,53 @@
+{
+  "name": "travel_adventure",
+  "display_name": "Travel Adventure",
+  "description": "World travel morphs visiting iconic landmarks",
+  "category": "themes",
+  "tags": ["travel", "adventure", "landmarks", "tourist", "world"],
+  "author": "StarStitch",
+  "version": "1.0",
+  "base_config": {
+    "project_name": "travel_morph",
+    "output_folder": "renders",
+    "settings": {
+      "aspect_ratio": "9:16",
+      "transition_duration_sec": 5,
+      "image_model": "black-forest-labs/flux-1.1-pro",
+      "video_model": "fal-ai/kling-video/v1.6/pro/image-to-video"
+    },
+    "global_scene": {
+      "location_prompt": "taking a selfie, golden hour lighting, tourist photography style, 4k photorealistic",
+      "negative_prompt": "blurry, distorted, cartoon, low quality, indoor"
+    },
+    "audio": {
+      "enabled": false,
+      "volume": 0.7,
+      "fade_in_sec": 1.0,
+      "fade_out_sec": 2.0,
+      "loop": true,
+      "normalize": true
+    },
+    "sequence": [
+      {
+        "id": "paris",
+        "name": "Paris",
+        "visual_prompt": "Happy tourist at Eiffel Tower, holding camera, beret hat"
+      },
+      {
+        "id": "rome",
+        "name": "Rome",
+        "visual_prompt": "Same person at Colosseum, sunglasses, summer outfit"
+      },
+      {
+        "id": "tokyo",
+        "name": "Tokyo",
+        "visual_prompt": "Same person at Shibuya crossing, colorful outfit, neon lights"
+      },
+      {
+        "id": "nyc",
+        "name": "New York",
+        "visual_prompt": "Same person in Times Square, casual urban style"
+      }
+    ]
+  }
+}

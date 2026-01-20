@@ -1,0 +1,40 @@
+{
+  "project_name": "starstitch_demo",
+  "output_folder": "renders",
+  "settings": {
+    "aspect_ratio": "9:16",
+    "transition_duration_sec": 5,
+    "image_model": "black-forest-labs/flux-1.1-pro",
+    "video_model": "fal-ai/kling-video/v1.6/pro/image-to-video"
+  },
+  "global_scene": {
+    "location_prompt": "taking a selfie at the Eiffel Tower, golden hour lighting, 4k photorealistic",
+    "negative_prompt": "blurry, distorted, cartoon, low quality"
+  },
+  "audio": {
+    "enabled": false,
+    "audio_path": "",
+    "volume": 0.8,
+    "fade_in_sec": 1.0,
+    "fade_out_sec": 2.0,
+    "loop": true,
+    "normalize": true
+  },
+  "sequence": [
+    {
+      "id": "anchor",
+      "name": "Tourist",
+      "visual_prompt": "A friendly tourist in casual clothes, smiling broadly"
+    },
+    {
+      "id": "celeb_01",
+      "name": "Elon Musk",
+      "visual_prompt": "Elon Musk in a black t-shirt, slight smirk"
+    },
+    {
+      "id": "celeb_02",
+      "name": "Taylor Swift",
+      "visual_prompt": "Taylor Swift with red lipstick, genuine smile"
+    }
+  ]
+}

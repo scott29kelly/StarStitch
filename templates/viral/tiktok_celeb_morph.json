@@ -1,0 +1,48 @@
+{
+  "name": "tiktok_celeb_morph",
+  "display_name": "TikTok Celebrity Morph",
+  "description": "Classic TikTok morph trend - transform into different celebrities with trendy locations",
+  "category": "viral",
+  "tags": ["tiktok", "celebrity", "morph", "trend", "viral", "selfie"],
+  "author": "StarStitch",
+  "version": "1.0",
+  "base_config": {
+    "project_name": "tiktok_morph",
+    "output_folder": "renders",
+    "settings": {
+      "aspect_ratio": "9:16",
+      "transition_duration_sec": 5,
+      "image_model": "black-forest-labs/flux-1.1-pro",
+      "video_model": "fal-ai/kling-video/v1.6/pro/image-to-video"
+    },
+    "global_scene": {
+      "location_prompt": "taking a selfie, trendy cafe background, aesthetic lighting, instagram style, 4k photorealistic",
+      "negative_prompt": "blurry, distorted, cartoon, low quality, watermark, text"
+    },
+    "audio": {
+      "enabled": false,
+      "volume": 0.7,
+      "fade_in_sec": 0.5,
+      "fade_out_sec": 1.5,
+      "loop": true,
+      "normalize": true
+    },
+    "sequence": [
+      {
+        "id": "anchor",
+        "name": "You",
+        "visual_prompt": "A person with natural smile, casual modern outfit"
+      },
+      {
+        "id": "celeb_1",
+        "name": "Celebrity 1",
+        "visual_prompt": "A famous person with confident expression"
+      },
+      {
+        "id": "celeb_2",
+        "name": "Celebrity 2",
+        "visual_prompt": "A famous person with warm smile"
+      }
+    ]
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "name": "fantasy_creatures",
+  "display_name": "Fantasy Creatures",
+  "description": "Magical fantasy transformations with mythical beings",
+  "category": "themes",
+  "tags": ["fantasy", "magic", "mythical", "creatures", "fairy tale"],
+  "author": "StarStitch",
+  "version": "1.0",
+  "base_config": {
+    "project_name": "fantasy_morph",
+    "output_folder": "renders",
+    "settings": {
+      "aspect_ratio": "9:16",
+      "transition_duration_sec": 5,
+      "image_model": "black-forest-labs/flux-1.1-pro",
+      "video_model": "fal-ai/kling-video/v1.6/pro/image-to-video"
+    },
+    "global_scene": {
+      "location_prompt": "enchanted magical forest, mystical atmosphere, ethereal lighting, fantasy art style, high detail, 4k",
+      "negative_prompt": "blurry, distorted, low quality, modern elements, technology"
+    },
+    "audio": {
+      "enabled": false,
+      "volume": 0.7,
+      "fade_in_sec": 1.5,
+      "fade_out_sec": 2.5,
+      "loop": true,
+      "normalize": true
+    },
+    "sequence": [
+      {
+        "id": "human",
+        "name": "Human",
+        "visual_prompt": "Person in medieval fantasy clothes, curious expression"
+      },
+      {
+        "id": "elf",
+        "name": "Elf",
+        "visual_prompt": "Elegant elf with pointed ears, silver hair, ethereal beauty"
+      },
+      {
+        "id": "dragon",
+        "name": "Dragon",
+        "visual_prompt": "Majestic dragon with shimmering scales, wise ancient eyes, powerful presence"
+      }
+    ]
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "name": "sports_champions",
+  "display_name": "Sports Champions",
+  "description": "Athletic transformations across different sports",
+  "category": "themes",
+  "tags": ["sports", "athlete", "champion", "fitness", "competition"],
+  "author": "StarStitch",
+  "version": "1.0",
+  "base_config": {
+    "project_name": "sports_morph",
+    "output_folder": "renders",
+    "settings": {
+      "aspect_ratio": "9:16",
+      "transition_duration_sec": 4,
+      "image_model": "black-forest-labs/flux-1.1-pro",
+      "video_model": "fal-ai/kling-video/v1.6/pro/image-to-video"
+    },
+    "global_scene": {
+      "location_prompt": "sports arena, dramatic stadium lighting, victory moment, sports photography, 4k action shot",
+      "negative_prompt": "blurry, distorted, cartoon, low quality, static"
+    },
+    "audio": {
+      "enabled": false,
+      "volume": 0.8,
+      "fade_in_sec": 0.5,
+      "fade_out_sec": 1.5,
+      "loop": true,
+      "normalize": true
+    },
+    "sequence": [
+      {
+        "id": "athlete",
+        "name": "Athlete",
+        "visual_prompt": "Determined athlete in training gear, focused expression"
+      },
+      {
+        "id": "soccer",
+        "name": "Soccer Star",
+        "visual_prompt": "Professional soccer player celebrating goal, team jersey"
+      },
+      {
+        "id": "basketball",
+        "name": "Basketball Pro",
+        "visual_prompt": "Basketball player mid-dunk, intense focus, arena lights"
+      }
+    ]
+  }
+}

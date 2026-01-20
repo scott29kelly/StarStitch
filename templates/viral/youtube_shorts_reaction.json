@@ -1,0 +1,48 @@
+{
+  "name": "youtube_shorts_reaction",
+  "display_name": "YouTube Shorts Reaction",
+  "description": "Create reaction-style morphs with expressive transitions",
+  "category": "viral",
+  "tags": ["youtube", "shorts", "reaction", "expressions", "faces"],
+  "author": "StarStitch",
+  "version": "1.0",
+  "base_config": {
+    "project_name": "reaction_morph",
+    "output_folder": "renders",
+    "settings": {
+      "aspect_ratio": "9:16",
+      "transition_duration_sec": 3,
+      "image_model": "black-forest-labs/flux-1.1-pro",
+      "video_model": "fal-ai/kling-video/v1.6/pro/image-to-video"
+    },
+    "global_scene": {
+      "location_prompt": "close-up portrait, home office background, natural window lighting, content creator setup, 4k",
+      "negative_prompt": "blurry, distorted, cartoon, low quality, too dark"
+    },
+    "audio": {
+      "enabled": false,
+      "volume": 0.6,
+      "fade_in_sec": 0.2,
+      "fade_out_sec": 1.0,
+      "loop": true,
+      "normalize": true
+    },
+    "sequence": [
+      {
+        "id": "surprised",
+        "name": "Surprised",
+        "visual_prompt": "Person with surprised expression, wide eyes, mouth slightly open"
+      },
+      {
+        "id": "laughing",
+        "name": "Laughing",
+        "visual_prompt": "Same person laughing heartily, genuine joy"
+      },
+      {
+        "id": "shocked",
+        "name": "Shocked",
+        "visual_prompt": "Same person with shocked expression, hand on face"
+      }
+    ]
+  }
+}
